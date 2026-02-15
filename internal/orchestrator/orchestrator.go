@@ -2,7 +2,6 @@ package orchestrator
 
 import (
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
@@ -11,38 +10,31 @@ import (
 	"github.com/google/uuid"
 )
 
-// Orchestrator manages experiment lifecycle and coordination.
-// It is the control plane of the system
 type Orchestrator struct {
-	experiments map[string]*models.Experiment  // In-memory experiment store
-	monitor     map[string]*monitoring.Monitor // Monitoring engine
-	mu          sync.Mutex                     // Protects concurrent access
+	experiments map[string]*models.Experiment
+	monitors    map[string]*monitoring.Monitor
+	mu          sync.Mutex
 }
 
-// Initiates the control plane
-// It prepares the experiment store and monitoring engine
 func NewOrchestrator() *Orchestrator {
 	return &Orchestrator{
 		experiments: make(map[string]*models.Experiment),
-		monitor:     make(map[string]*monitoring.Monitor),
+		monitors:    make(map[string]*monitoring.Monitor),
 	}
 }
 
-// StartExperiment creates and registers a new experiment.
-// It also launches monitoring and lifecycle simulation
-func (o *Orchestrator) StartExperiment(faultType, target string, duration int) (*models.Experiment, error) {
+func (o *Orchestrator) StartExperiment(
+	faultType, target, targetURL string,
+	duration int,
+) (*models.Experiment, error) {
 
-	// Basic validation
 	if duration <= 0 {
 		return nil, errors.New("duration must be greater than 0")
 	}
 
-	if faultType == "" || target == "" {
-		return nil, errors.New("faultType and target are required")
+	if faultType == "" || target == "" || targetURL == "" {
+		return nil, errors.New("faultType, target and targetURL are required")
 	}
-	// Lock to prevent race condition while modifying map.
-	o.mu.Lock()
-	defer o.mu.Unlock()
 
 	id := uuid.New().String()
 
@@ -50,63 +42,99 @@ func (o *Orchestrator) StartExperiment(faultType, target string, duration int) (
 		ID:        id,
 		FaultType: faultType,
 		Target:    target,
+		TargetURL: targetURL,
 		Duration:  duration,
-		State:     models.StateCreated,
+		State:     models.StateRunning,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
-	// Store experiment in memory
+
+	o.mu.Lock()
 	o.experiments[id] = exp
+	o.mu.Unlock()
 
-	// Create monitor for this experiment
-	monitor := monitoring.NewMonitor()
-	o.monitor[id] = monitor
-	monitor.Start(id) // Start monitoring in background
+	// Event callback from Monitor
+	callback := func(event monitoring.EventType) {
 
-	go o.runLifecycle(id) // Start Lifecycle simulation in background
+		o.mu.Lock()
+		defer o.mu.Unlock()
+
+		experiment, exists := o.experiments[id]
+		if !exists {
+			return
+		}
+
+		if experiment.State == models.StateCompleted {
+			return
+		}
+
+		switch event {
+		case monitoring.EventDown:
+			experiment.State = models.StateFaulted
+			experiment.UpdatedAt = time.Now()
+
+		case monitoring.EventRecovered:
+			o.completeExperimentLocked(id)
+		}
+	}
+
+	monitor := monitoring.NewMonitor(callback)
+
+	o.mu.Lock()
+	o.monitors[id] = monitor
+	o.mu.Unlock()
+
+	monitor.Start(id, targetURL)
+
+	// Duration cap goroutine
+	go func() {
+		time.Sleep(time.Duration(duration) * time.Second)
+
+		o.mu.Lock()
+		defer o.mu.Unlock()
+
+		experiment, exists := o.experiments[id]
+		if !exists {
+			return
+		}
+
+		if experiment.State != models.StateCompleted {
+			o.completeExperimentLocked(id)
+		}
+	}()
 
 	return exp, nil
 }
 
-// runLifecycle simulates state transitions.
-func (o *Orchestrator) runLifecycle(id string) {
-
-	o.updateState(id, models.StateFaulted)
-
-	o.mu.Lock()
-	exp := o.experiments[id]
-	o.mu.Unlock()
-
-	time.Sleep(time.Duration(exp.Duration) * time.Second)
-
-	o.updateState(id, models.StateRecovering)
-
-	time.Sleep(2 * time.Second)
-
-	o.updateState(id, models.StateCompleted)
-}
-
-// updateState safely trasitions experiment state
-// Mutex ensures thread-safe update.
-func (o *Orchestrator) updateState(id string, newState models.ExperimentState) {
+// StopExperiment allows manual stopping
+func (o *Orchestrator) StopExperiment(id string) error {
 
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	exp, exists := o.experiments[id]
+	experiment, exists := o.experiments[id]
 	if !exists {
-		return
+		return errors.New("experiment not found")
 	}
-	exp.State = newState
-	exp.UpdatedAt = time.Now()
 
-	fmt.Println("Experiment", id, "state updated to", newState)
+	if experiment.State == models.StateCompleted {
+		return nil
+	}
 
-	if newState == models.StateCompleted {
-		if monitor, ok := o.monitor[id]; ok {
-			monitor.Stop()
-			delete(o.monitor, id)
-		}
+	o.completeExperimentLocked(id)
+	return nil
+}
+
+// completeExperimentLocked assumes mutex already locked
+func (o *Orchestrator) completeExperimentLocked(id string) {
+
+	experiment := o.experiments[id]
+	experiment.State = models.StateCompleted
+	experiment.UpdatedAt = time.Now()
+
+	if monitor, ok := o.monitors[id]; ok {
+		monitor.Stop()
+		delete(o.monitors, id)
 	}
 }
 

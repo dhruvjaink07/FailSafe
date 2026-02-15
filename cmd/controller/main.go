@@ -22,6 +22,9 @@ func main() {
 		getHandler(w, r, orch)
 	})
 
+	http.HandleFunc("/experiment/stop", func(w http.ResponseWriter, r *http.Request) {
+		stopHandler(w, r, orch)
+	})
 	log.Println("Server running on : 8080")
 	err := http.ListenAndServe(":8080", nil)
 	if err != nil {
@@ -38,6 +41,7 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 type StartRequest struct {
 	FaultType string `json:"faultType"`
 	Target    string `json:"target"`
+	TargetURL string `json:"targetUrl"`
 	Duration  int    `json:"duration"`
 }
 
@@ -55,7 +59,7 @@ func startHandler(w http.ResponseWriter, r *http.Request, orch *orchestrator.Orc
 		return
 	}
 
-	exp, err := orch.StartExperiment(req.FaultType, req.Target, req.Duration)
+	exp, err := orch.StartExperiment(req.FaultType, req.Target, req.TargetURL, req.Duration)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -79,4 +83,26 @@ func getHandler(w http.ResponseWriter, r *http.Request, orch *orchestrator.Orche
 	}
 
 	json.NewEncoder(w).Encode(exp)
+}
+
+func stopHandler(w http.ResponseWriter, r *http.Request, orch *orchestrator.Orchestrator) {
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		http.Error(w, "missing id", http.StatusBadRequest)
+		return
+	}
+
+	err := orch.StopExperiment(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.Write([]byte("experiment stopped"))
 }

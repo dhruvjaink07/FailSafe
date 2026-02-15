@@ -20,6 +20,7 @@ type Experiment struct {
 	ID        string
 	FaultType string
 	Target    string
+	TargetURL string
 	Duration  int
 
 	State     ExperimentState
