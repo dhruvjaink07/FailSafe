@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/dhruvjaink07/failsafe/internal/models"
 	"github.com/shirou/gopsutil/v3/cpu"
 )
 
@@ -17,7 +18,7 @@ const (
 )
 
 // EventCallback allows monitor to notify orchestrator
-type EventCallback func(event EventType)
+type EventCallback func(event EventType, sample models.MetricSample)
 
 // Monitor represents a runtime metric collector
 // It runs in background and samples system metrics periodically until stopped.=
@@ -104,6 +105,17 @@ func (m *Monitor) collect(experimentID string, targetURL string) {
 		}
 	}
 
+	sample := models.MetricSample{
+		Timestamp: time.Now(),
+		CPU:       cpuPercent[0],
+		LatencyMs: latency.Milliseconds(),
+		Status:    statusCode,
+		IsDown:    m.isDown,
+	}
+
+	if m.callback != nil {
+		m.callback("", sample)
+	}
 	// -------- DEBUG ERROR COUNT --------
 	fmt.Printf("Consecutive Errors: %d\n", m.consecutiveErr)
 
@@ -113,7 +125,7 @@ func (m *Monitor) collect(experimentID string, targetURL string) {
 		fmt.Printf("⚠ Experiment %s DOWN detected\n", experimentID)
 
 		if m.callback != nil {
-			m.callback(EventDown)
+			m.callback(EventDown, sample)
 		}
 	}
 
@@ -122,7 +134,7 @@ func (m *Monitor) collect(experimentID string, targetURL string) {
 		m.isDown = false
 		fmt.Printf("✔ Experiment %s RECOVERED\n", experimentID)
 		if m.callback != nil {
-			m.callback(EventRecovered)
+			m.callback(EventRecovered, sample)
 		}
 	}
 

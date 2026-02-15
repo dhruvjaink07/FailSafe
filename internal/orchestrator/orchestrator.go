@@ -13,6 +13,9 @@ import (
 type Orchestrator struct {
 	experiments map[string]*models.Experiment
 	monitors    map[string]*monitoring.Monitor
+	metrics     map[string][]models.MetricSample
+	downtime    map[string]time.Time
+	totalDown   map[string]time.Duration
 	mu          sync.Mutex
 }
 
@@ -20,6 +23,9 @@ func NewOrchestrator() *Orchestrator {
 	return &Orchestrator{
 		experiments: make(map[string]*models.Experiment),
 		monitors:    make(map[string]*monitoring.Monitor),
+		metrics:     make(map[string][]models.MetricSample),
+		downtime:    make(map[string]time.Time),
+		totalDown:   make(map[string]time.Duration),
 	}
 }
 
@@ -51,13 +57,17 @@ func (o *Orchestrator) StartExperiment(
 
 	o.mu.Lock()
 	o.experiments[id] = exp
+	o.metrics[id] = []models.MetricSample{}
+	o.totalDown[id] = 0
 	o.mu.Unlock()
 
-	// Event callback from Monitor
-	callback := func(event monitoring.EventType) {
+	callback := func(event monitoring.EventType, sample models.MetricSample) {
 
 		o.mu.Lock()
 		defer o.mu.Unlock()
+
+		// Store metric sample
+		o.metrics[id] = append(o.metrics[id], sample)
 
 		experiment, exists := o.experiments[id]
 		if !exists {
@@ -69,11 +79,17 @@ func (o *Orchestrator) StartExperiment(
 		}
 
 		switch event {
+
 		case monitoring.EventDown:
+			o.downtime[id] = time.Now()
 			experiment.State = models.StateFaulted
 			experiment.UpdatedAt = time.Now()
 
 		case monitoring.EventRecovered:
+			if start, ok := o.downtime[id]; ok {
+				o.totalDown[id] += time.Since(start)
+				delete(o.downtime, id)
+			}
 			o.completeExperimentLocked(id)
 		}
 	}
@@ -86,7 +102,7 @@ func (o *Orchestrator) StartExperiment(
 
 	monitor.Start(id, targetURL)
 
-	// Duration cap goroutine
+	// Duration cap
 	go func() {
 		time.Sleep(time.Duration(duration) * time.Second)
 
@@ -99,6 +115,13 @@ func (o *Orchestrator) StartExperiment(
 		}
 
 		if experiment.State != models.StateCompleted {
+
+			// If currently down, accumulate downtime
+			if start, ok := o.downtime[id]; ok {
+				o.totalDown[id] += time.Since(start)
+				delete(o.downtime, id)
+			}
+
 			o.completeExperimentLocked(id)
 		}
 	}()
@@ -147,5 +170,51 @@ func (o *Orchestrator) GetExperiment(id string) (*models.Experiment, error) {
 	if !exists {
 		return nil, errors.New("experiment not found")
 	}
-	return exp, nil
+
+	// Return a copy to avoid external mutation
+	copyExp := *exp
+	return &copyExp, nil
+}
+
+func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
+
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	samples, exists := o.metrics[id]
+	if !exists {
+		return nil, errors.New("experiment not found")
+	}
+
+	totalSamples := len(samples)
+	if totalSamples == 0 {
+		return nil, errors.New("no metrics collected")
+	}
+
+	var totalLatency int64
+	var errorCount int
+
+	for _, s := range samples {
+		totalLatency += s.LatencyMs
+		if s.Status >= 400 {
+			errorCount++
+		}
+	}
+
+	avgLatency := totalLatency / int64(totalSamples)
+
+	totalDuration := time.Since(o.experiments[id].CreatedAt)
+
+	resilienceScore := 1.0
+	if totalDuration > 0 {
+		resilienceScore = 1 - (o.totalDown[id].Seconds() / totalDuration.Seconds())
+	}
+	return map[string]interface{}{
+		"total_samples":    totalSamples,
+		"average_latency":  avgLatency,
+		"error_count":      errorCount,
+		"total_downtime_s": o.totalDown[id].Seconds(),
+		"resilience_score": resilienceScore,
+		"samples":          samples,
+	}, nil
 }

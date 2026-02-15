@@ -25,6 +25,10 @@ func main() {
 	http.HandleFunc("/experiment/stop", func(w http.ResponseWriter, r *http.Request) {
 		stopHandler(w, r, orch)
 	})
+
+	http.HandleFunc("/experiment/metrics", func(w http.ResponseWriter, r *http.Request) {
+		metricsHandler(w, r, orch)
+	})
 	log.Println("Server running on : 8080")
 	err := http.ListenAndServe(":8080", nil)
 	if err != nil {
@@ -105,4 +109,21 @@ func stopHandler(w http.ResponseWriter, r *http.Request, orch *orchestrator.Orch
 	}
 
 	w.Write([]byte("experiment stopped"))
+}
+
+func metricsHandler(w http.ResponseWriter, r *http.Request, orch *orchestrator.Orchestrator) {
+	id := r.URL.Query().Get("id")
+
+	if id == "" {
+		http.Error(w, "missing id", http.StatusBadRequest)
+		return
+	}
+
+	data, err := orch.GetMetrics(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	json.NewEncoder(w).Encode(data)
 }
