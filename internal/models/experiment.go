@@ -2,7 +2,11 @@ package models
 
 import "time"
 
-// This defines lifecycle of states
+/*
+---------------------------------------
+Experiment State Machine
+---------------------------------------
+*/
 
 type ExperimentState string
 
@@ -15,15 +19,41 @@ const (
 	StateFailed     ExperimentState = "failed"
 )
 
-// This is our in-memory Representation of an experiment. In a real implementation, this would likely be stored in a database.
-type Experiment struct {
-	ID        string
-	FaultType string
-	Target    string
-	TargetURL string
-	Duration  int
+/*
+---------------------------------------
+Experiment Model
+---------------------------------------
 
-	State     ExperimentState
-	CreatedAt time.Time
-	UpdatedAt time.Time
+Represents a single fault injection experiment.
+
+This struct is the single source of truth
+for experiment lifecycle and metadata.
+*/
+
+type Experiment struct {
+
+	// Unique experiment ID
+	ID string `json:"id"`
+
+	// Type of fault being injected
+	FaultType string `json:"fault_type"`
+
+	// Docker image used for this experiment
+	Image string `json:"image"`
+
+	// Docker container name used for testing
+	Container string `json:"container"`
+
+	// Target URL monitored for health
+	TargetURL string `json:"target_url"`
+
+	// Duration in seconds
+	Duration int `json:"duration"`
+
+	// Current lifecycle state
+	State ExperimentState `json:"state"`
+
+	// Timestamps
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }

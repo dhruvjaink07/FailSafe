@@ -2,12 +2,22 @@ package docker
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"os/exec"
+	"strconv"
 	"strings"
 )
 
 type Manager struct{}
+
+type dockerStats struct {
+	CPUPerc  string `json:"CPUPerc"`
+	MemUsage string `json:"MemUsage"`
+	MemPerc  string `json:"MemPerc"`
+	NetIO    string `json:"NetIO"`
+	BlockIO  string `json:"BlockIO"`
+}
 
 func NewManager() *Manager {
 	return &Manager{}
@@ -183,4 +193,40 @@ func (m *Manager) EnsureContainerReady(name, image, portMapping string) error {
 	}
 
 	return m.StartContainer(name)
+}
+
+// Docker stats for container
+
+func (m *Manager) GetContainerStats(name string) (float64, float64, float64, string, string, error) {
+
+	out, err := m.run("stats", name, "--no-stream", "--format", "{{json .}}")
+	if err != nil {
+		return 0, 0, 0, "", "", err
+	}
+
+	var stats dockerStats
+	err = json.Unmarshal([]byte(out), &stats)
+	if err != nil {
+		return 0, 0, 0, "", "", err
+	}
+
+	cpuStr := strings.TrimSuffix(stats.CPUPerc, "%")
+	cpuVal, _ := strconv.ParseFloat(cpuStr, 64)
+
+	memPctStr := strings.TrimSuffix(stats.MemPerc, "%")
+	memPctVal, _ := strconv.ParseFloat(memPctStr, 64)
+
+	// MemUsage format: "5.43MiB / 62.8MiB"
+	memParts := strings.Split(stats.MemUsage, "/")
+	memVal := 0.0
+
+	if len(memParts) > 0 {
+		memValStr := strings.TrimSpace(memParts[0])
+		memValStr = strings.TrimSuffix(memValStr, "MiB")
+		memValStr = strings.TrimSuffix(memValStr, "GiB")
+
+		memVal, _ = strconv.ParseFloat(memValStr, 64)
+	}
+
+	return cpuVal, memVal, memPctVal, stats.NetIO, stats.BlockIO, nil
 }
