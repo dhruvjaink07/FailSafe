@@ -1,0 +1,61 @@
+{
+    "blast_radius_percent": 50,
+    "endpoints": {
+        "http://localhost:8081": {
+            "container": {
+                "avg_cpu_percent": 0,
+                "avg_memory_mb": 2.93,
+                "max_cpu_percent": 0,
+                "max_memory_mb": 13.23
+            },
+            "degraded": true,
+            "errors": {
+                "4xx": 0,
+                "5xx": 0,
+                "max_failure_streak": 7,
+                "rate_percent": 77.77777777777779,
+                "total": 7
+            },
+            "latency": {
+                "avg_ms": 3,
+                "jitter_ms": 1.625,
+                "p50_ms": 2,
+                "p95_ms": 7,
+                "p99_ms": 7,
+                "stddev_ms": 4.149966532662911
+            },
+            "requests_total": 9,
+            "stability_score": 33.44466756002504,
+            "throughput_rps": 0.8999528154738847
+        },
+        "http://localhost:8082": {
+            "container": {
+                "avg_cpu_percent": 0,
+                "avg_memory_mb": 3.29625,
+                "max_cpu_percent": 0,
+                "max_memory_mb": 13.23
+            },
+            "degraded": false,
+            "errors": {
+                "4xx": 0,
+                "5xx": 0,
+                "max_failure_streak": 0,
+                "rate_percent": 0,
+                "total": 0
+            },
+            "latency": {
+                "avg_ms": 2,
+                "jitter_ms": 0.8571428571428571,
+                "p50_ms": 2,
+                "p95_ms": 3,
+                "p99_ms": 3,
+                "stddev_ms": 2.1505813167606567
+            },
+            "requests_total": 8,
+            "stability_score": 78.49418683239344,
+            "throughput_rps": 0.7999580581990086
+        }
+    },
+    "experiment_state": "completed",
+    "total_requests": 17
+}

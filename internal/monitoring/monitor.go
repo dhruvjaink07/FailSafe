@@ -1,7 +1,6 @@
 package monitoring
 
 import (
-	"fmt"
 	"net/http"
 	"time"
 
@@ -13,7 +12,6 @@ import (
 type EventType string
 
 const (
-	EventNone      EventType = ""
 	EventDown      EventType = "down"
 	EventRecovered EventType = "recovered"
 )
@@ -21,134 +19,156 @@ const (
 type EventCallback func(event EventType, sample models.MetricSample)
 
 type Monitor struct {
-	stopChan       chan struct{}
-	consecutiveErr int
-	isDown         bool
-	callback       EventCallback
-	dockerManager  *docker.Manager
-	containerName  string
+	stopChan chan struct{}
+
+	// Track failure streak per endpoint
+	consecutiveErr map[string]int
+	isDown         map[string]bool
+
+	callback EventCallback
+
+	dockerManager *docker.Manager
+	containers    []string
 }
 
-func NewMonitor(cb EventCallback, dm *docker.Manager, container string) *Monitor {
+func NewMonitor(
+	cb EventCallback,
+	dm *docker.Manager,
+	containers []string,
+) *Monitor {
+
 	return &Monitor{
-		stopChan:      make(chan struct{}),
-		callback:      cb,
-		dockerManager: dm,
-		containerName: container,
+		stopChan:       make(chan struct{}),
+		callback:       cb,
+		dockerManager:  dm,
+		containers:     containers,
+		consecutiveErr: make(map[string]int),
+		isDown:         make(map[string]bool),
 	}
 }
 
-func (m *Monitor) Start(experimentID string, targetURL string) {
+func (m *Monitor) Start(experimentID string, endpoints []string) {
+
 	ticker := time.NewTicker(1 * time.Second)
 
 	go func() {
 		for {
 			select {
+
 			case <-ticker.C:
-				m.collect(experimentID, targetURL)
+				m.collect(experimentID, endpoints)
+
 			case <-m.stopChan:
 				ticker.Stop()
-				fmt.Println("Monitoring stopped for", experimentID)
 				return
 			}
 		}
 	}()
 }
 
-func (m *Monitor) collect(experimentID string, targetURL string) {
+func (m *Monitor) collect(experimentID string, endpoints []string) {
 
-	// ---------- HOST CPU ----------
+	// ---------------- HOST CPU ----------------
+
+	hostCPU := 0.0
 	cpuPercent, err := cpu.Percent(0, false)
-	if err != nil {
-		fmt.Println("CPU error:", err)
-		return
+	if err == nil && len(cpuPercent) > 0 {
+		hostCPU = cpuPercent[0]
 	}
 
-	// ---------- HTTP PROBE ----------
+	// ---------------- CONTAINER STATS ----------------
+
+	var totalContainerCPU float64
+	var totalMem float64
+	var totalMemPercent float64
+	var totalNetIO string
+	var totalBlockIO string
+
+	for _, container := range m.containers {
+
+		stats, err := m.dockerManager.GetContainerStats(container)
+		if err != nil {
+			continue
+		}
+
+		totalContainerCPU += stats.CPUPercent
+		totalMem += stats.MemoryMB
+		totalMemPercent += stats.MemoryPercent
+		totalNetIO = stats.NetworkIO
+		totalBlockIO = stats.BlockIO
+	}
+
+	containerCount := float64(len(m.containers))
+	if containerCount > 0 {
+		totalContainerCPU /= containerCount
+		totalMem /= containerCount
+		totalMemPercent /= containerCount
+	}
+
 	client := http.Client{Timeout: 2 * time.Second}
 
-	start := time.Now()
-	resp, err := client.Get(targetURL)
-	latency := time.Since(start)
+	// ---------------- PER-ENDPOINT MONITORING ----------------
 
-	statusCode := 0
-	success := false
+	for _, url := range endpoints {
 
-	if err != nil {
-		m.consecutiveErr++
-	} else {
-		statusCode = resp.StatusCode
-		resp.Body.Close()
+		start := time.Now()
+		resp, err := client.Get(url)
+		latency := time.Since(start)
 
-		if statusCode >= 200 && statusCode < 300 {
-			success = true
-			m.consecutiveErr = 0
+		statusCode := 0
+		success := false
+
+		if err != nil {
+			m.consecutiveErr[url]++
 		} else {
-			m.consecutiveErr++
+			statusCode = resp.StatusCode
+			resp.Body.Close()
+
+			if statusCode >= 200 && statusCode < 300 {
+				success = true
+				m.consecutiveErr[url] = 0
+			} else {
+				m.consecutiveErr[url]++
+			}
+		}
+
+		sample := models.MetricSample{
+			Timestamp:           time.Now(),
+			Endpoint:            url,
+			CPU:                 hostCPU,
+			LatencyMs:           latency.Milliseconds(),
+			Status:              statusCode,
+			IsDown:              m.isDown[url],
+			ContainerCPU:        totalContainerCPU,
+			ContainerMemoryMB:   totalMem,
+			ContainerMemPercent: totalMemPercent,
+			ContainerNetIO:      totalNetIO,
+			ContainerBlockIO:    totalBlockIO,
+		}
+
+		// Emit sample
+		if m.callback != nil {
+			m.callback("", sample)
+		}
+
+		// -------- DOWN DETECTION PER ENDPOINT --------
+
+		if m.consecutiveErr[url] >= 3 && !m.isDown[url] {
+			m.isDown[url] = true
+			if m.callback != nil {
+				m.callback(EventDown, sample)
+			}
+		}
+
+		// -------- RECOVERY DETECTION PER ENDPOINT --------
+
+		if success && m.isDown[url] {
+			m.isDown[url] = false
+			if m.callback != nil {
+				m.callback(EventRecovered, sample)
+			}
 		}
 	}
-
-	// ---------- CONTAINER STATS ----------
-	var containerCPU, containerMemMB, containerMemPct float64
-	var netIO, blockIO string
-
-	if m.dockerManager != nil {
-		cCPU, cMem, cMemPct, nIO, bIO, err :=
-			m.dockerManager.GetContainerStats(m.containerName)
-
-		if err == nil {
-			containerCPU = cCPU
-			containerMemMB = cMem
-			containerMemPct = cMemPct
-			netIO = nIO
-			blockIO = bIO
-		}
-	}
-
-	// ---------- STATE TRANSITIONS ----------
-	event := EventNone
-
-	if m.consecutiveErr >= 3 && !m.isDown {
-		m.isDown = true
-		event = EventDown
-		fmt.Printf("⚠ Experiment %s DOWN detected\n", experimentID)
-	}
-
-	if success && m.isDown {
-		m.isDown = false
-		event = EventRecovered
-		fmt.Printf("✔ Experiment %s RECOVERED\n", experimentID)
-	}
-
-	// ---------- METRIC SAMPLE ----------
-	sample := models.MetricSample{
-		Timestamp: time.Now(),
-		CPU:       cpuPercent[0],
-		LatencyMs: latency.Milliseconds(),
-		Status:    statusCode,
-		IsDown:    m.isDown,
-
-		ContainerCPU:     containerCPU,
-		ContainerMemMB:   containerMemMB,
-		ContainerMemPct:  containerMemPct,
-		ContainerNetIO:   netIO,
-		ContainerBlockIO: blockIO,
-	}
-
-	// ---------- CALLBACK ----------
-	if m.callback != nil {
-		m.callback(event, sample)
-	}
-
-	fmt.Printf(
-		"[EXP %s] CPU: %.2f%% | C-CPU: %.2f%% | Mem: %.2fMB | Latency: %v | Status: %d\n",
-		experimentID,
-		cpuPercent[0],
-		containerCPU,
-		containerMemMB,
-		latency,
-		statusCode,
-	)
 }
 
 func (m *Monitor) Stop() {

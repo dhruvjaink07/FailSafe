@@ -7,38 +7,51 @@ import (
 	"time"
 
 	"github.com/dhruvjaink07/failsafe/internal/docker"
+	"github.com/dhruvjaink07/failsafe/internal/fault"
+
+	// "github.com/dhruvjaink07/failsafe/internal/fault"
 	"github.com/dhruvjaink07/failsafe/internal/models"
 	"github.com/dhruvjaink07/failsafe/internal/monitoring"
 	"github.com/google/uuid"
 )
 
 type Orchestrator struct {
-	experiments  map[string]*models.Experiment
-	monitors     map[string]*monitoring.Monitor
-	metrics      map[string][]models.MetricSample
+	experiments map[string]*models.Experiment
+	monitors    map[string]*monitoring.Monitor
+	metrics     map[string]map[string][]models.MetricSample
+
 	downtime     map[string]time.Time
 	totalDown    map[string]time.Duration
 	failures     map[string]int
 	lastRecovery map[string]time.Duration
-	docker       *docker.Manager
-	mu           sync.Mutex
+
+	docker   *docker.Manager
+	injector *fault.MockInjector
+
+	mu sync.Mutex
 }
 
 func NewOrchestrator() *Orchestrator {
+
+	dm := docker.NewManager()
+
 	return &Orchestrator{
 		experiments:  make(map[string]*models.Experiment),
 		monitors:     make(map[string]*monitoring.Monitor),
-		metrics:      make(map[string][]models.MetricSample),
+		metrics:      make(map[string]map[string][]models.MetricSample),
 		downtime:     make(map[string]time.Time),
 		totalDown:    make(map[string]time.Duration),
 		failures:     make(map[string]int),
 		lastRecovery: make(map[string]time.Duration),
-		docker:       docker.NewManager(),
+		docker:       dm,
+		injector:     fault.NewMockInjector(dm), // Replace with RustInjector later
 	}
 }
 
 func (o *Orchestrator) StartExperiment(
-	faultType, image, container, portMapping, targetURL string,
+	faultType string,
+	targetContainers []string,
+	observedEndpoints []string,
 	duration int,
 ) (*models.Experiment, error) {
 
@@ -46,51 +59,55 @@ func (o *Orchestrator) StartExperiment(
 		return nil, errors.New("duration must be greater than 0")
 	}
 
-	if faultType == "" || image == "" || container == "" || portMapping == "" || targetURL == "" {
-		return nil, errors.New("faultType, image, container, portMapping and targetURL are required")
+	if len(targetContainers) == 0 || len(observedEndpoints) == 0 {
+		return nil, errors.New("targetContainers and observedEndpoints are required")
 	}
 
-	// Ensure container ready BEFORE creating experiment
-	err := o.docker.EnsureContainerReady(container, image, portMapping)
-	if err != nil {
-		return nil, errors.New("failed to ensure container ready: " + err.Error())
+	// Ensure all target containers are ready
+	for _, c := range targetContainers {
+		if err := o.docker.EnsureContainerReady(c, "", ""); err != nil {
+			return nil, err
+		}
 	}
 
 	id := uuid.New().String()
 
 	exp := &models.Experiment{
-		ID:        id,
-		FaultType: faultType,
-		Image:     image,
-		Container: container,
-		TargetURL: targetURL,
-		Duration:  duration,
-		State:     models.StateRunning,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ID:                id,
+		ObservedEndpoints: observedEndpoints,
+		TargetContainers:  targetContainers,
+		FaultType:         faultType,
+		Duration:          duration,
+		State:             models.StateRunning,
+		Phase:             models.PhaseBaseline,
+		CreatedAt:         time.Now(),
+		UpdatedAt:         time.Now(),
 	}
 
 	o.mu.Lock()
 	o.experiments[id] = exp
-	o.metrics[id] = []models.MetricSample{}
+	o.metrics[id] = make(map[string][]models.MetricSample)
+	for _, ep := range observedEndpoints {
+		o.metrics[id][ep] = []models.MetricSample{}
+	}
 	o.totalDown[id] = 0
+	o.failures[id] = 0
 	o.mu.Unlock()
 
-	// Monitoring callback to track metrics and state changes
 	callback := func(event monitoring.EventType, sample models.MetricSample) {
 
 		o.mu.Lock()
 		defer o.mu.Unlock()
 
-		// Store metric sample
-		o.metrics[id] = append(o.metrics[id], sample)
+		o.metrics[id][sample.Endpoint] = append(o.metrics[id][sample.Endpoint], sample)
 
 		switch event {
+
 		case monitoring.EventDown:
-			o.downtime[id] = time.Now()
-			o.experiments[id].State = models.StateFaulted
-			o.experiments[id].UpdatedAt = time.Now()
-			o.failures[id]++
+			if _, exists := o.downtime[id]; !exists {
+				o.downtime[id] = time.Now()
+				o.failures[id]++
+			}
 
 		case monitoring.EventRecovered:
 			if start, ok := o.downtime[id]; ok {
@@ -99,50 +116,75 @@ func (o *Orchestrator) StartExperiment(
 				o.lastRecovery[id] = recoveryTime
 				delete(o.downtime, id)
 			}
-
-			o.completeExperimentLocked(id)
 		}
 	}
-	monitor := monitoring.NewMonitor(callback, o.docker, container)
+
+	monitor := monitoring.NewMonitor(callback, o.docker, targetContainers)
 
 	o.mu.Lock()
 	o.monitors[id] = monitor
 	o.mu.Unlock()
 
-	monitor.Start(id, targetURL)
+	monitor.Start(id, observedEndpoints)
 
-	// Duration cap
-	go func() {
-		time.Sleep(time.Duration(duration) * time.Second)
-
-		o.mu.Lock()
-		defer o.mu.Unlock()
-
-		experiment, exists := o.experiments[id]
-		if !exists {
-			return
-		}
-
-		if experiment.State != models.StateCompleted {
-			o.completeExperimentLocked(id)
-		}
-	}()
+	go o.runTimeline(id)
 
 	return exp, nil
 }
 
-// StopExperiment allows manual stopping
+func (o *Orchestrator) runTimeline(id string) {
+
+	o.setPhase(id, models.PhaseBaseline)
+
+	time.Sleep(5 * time.Second)
+
+	o.setPhase(id, models.PhaseInjecting)
+
+	o.mu.Lock()
+	exp := o.experiments[id]
+	o.mu.Unlock()
+
+	config := fault.FaultConfig{
+		ExperimentID:    id,
+		Containers:      exp.TargetContainers,
+		Type:            fault.FaultType(exp.FaultType),
+		DurationSeconds: exp.Duration / 2,
+	}
+
+	_ = o.injector.Inject(config)
+
+	o.setPhase(id, models.PhaseRecovering)
+
+	time.Sleep(5 * time.Second)
+
+	o.completeExperiment(id)
+}
+
+func (o *Orchestrator) setPhase(id string, phase models.ExperimentPhase) {
+
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	exp, ok := o.experiments[id]
+	if !ok {
+		return
+	}
+
+	exp.Phase = phase
+	exp.UpdatedAt = time.Now()
+}
+
 func (o *Orchestrator) StopExperiment(id string) error {
 
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	experiment, exists := o.experiments[id]
+	exp, exists := o.experiments[id]
 	if !exists {
 		return errors.New("experiment not found")
 	}
 
-	if experiment.State == models.StateCompleted {
+	if exp.State == models.StateCompleted {
 		return nil
 	}
 
@@ -150,20 +192,22 @@ func (o *Orchestrator) StopExperiment(id string) error {
 	return nil
 }
 
-// completeExperimentLocked assumes mutex already locked
+func (o *Orchestrator) completeExperiment(id string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.completeExperimentLocked(id)
+}
+
 func (o *Orchestrator) completeExperimentLocked(id string) {
+
 	exp := o.experiments[id]
 	exp.State = models.StateCompleted
+	exp.Phase = models.PhaseCompleted
 	exp.UpdatedAt = time.Now()
 
 	if monitor, ok := o.monitors[id]; ok {
 		monitor.Stop()
 		delete(o.monitors, id)
-	}
-
-	// Stop container safely
-	if exp.Container != "" {
-		_ = o.docker.StopContainer(exp.Container)
 	}
 }
 
@@ -177,7 +221,6 @@ func (o *Orchestrator) GetExperiment(id string) (*models.Experiment, error) {
 		return nil, errors.New("experiment not found")
 	}
 
-	// Return a copy to avoid external mutation
 	copyExp := *exp
 	return &copyExp, nil
 }
@@ -187,175 +230,164 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	samples, exists := o.metrics[id]
+	exp, exists := o.experiments[id]
 	if !exists {
 		return nil, errors.New("experiment not found")
 	}
 
-	totalRequests := len(samples)
-	if totalRequests == 0 {
-		return nil, errors.New("no metrics collected")
+	endpointMap, exists := o.metrics[id]
+	if !exists {
+		return nil, errors.New("no metrics found")
 	}
 
-	var latencies []int64
-	var cpuSeries []float64
-	var containerCPUSeries []float64
+	result := make(map[string]interface{})
+	endpointResults := make(map[string]interface{})
 
-	var errorCount int
-	var count4xx int
-	var count5xx int
+	totalEndpoints := 0
+	degradedEndpoints := 0
 
-	var totalContainerCPU float64
-	var maxContainerCPU float64
-	var totalMem float64
-	var maxMem float64
+	globalRequests := 0
 
-	var currentFailureStreak int
-	var maxFailureStreak int
+	for endpoint, samples := range endpointMap {
 
-	for _, s := range samples {
+		if len(samples) == 0 {
+			continue
+		}
 
-		latencies = append(latencies, s.LatencyMs)
-		cpuSeries = append(cpuSeries, s.CPU)
-		containerCPUSeries = append(containerCPUSeries, s.ContainerCPU)
+		totalEndpoints++
+		totalRequests := len(samples)
+		globalRequests += totalRequests
 
-		if s.Status >= 400 || s.Status == 0 {
-			errorCount++
-			currentFailureStreak++
-			if currentFailureStreak > maxFailureStreak {
-				maxFailureStreak = currentFailureStreak
+		var latencies []int64
+		var containerCPUSeries []float64
+		var totalContainerCPU float64
+		var maxContainerCPU float64
+		var totalMem float64
+		var maxMem float64
+
+		var errorCount int
+		var count4xx int
+		var count5xx int
+		var currentFailureStreak int
+		var maxFailureStreak int
+
+		for _, s := range samples {
+
+			latencies = append(latencies, s.LatencyMs)
+			containerCPUSeries = append(containerCPUSeries, s.ContainerCPU)
+
+			if s.Status >= 400 || s.Status == 0 {
+				errorCount++
+				currentFailureStreak++
+				if currentFailureStreak > maxFailureStreak {
+					maxFailureStreak = currentFailureStreak
+				}
+			} else {
+				currentFailureStreak = 0
 			}
-		} else {
-			currentFailureStreak = 0
+
+			if s.Status >= 400 && s.Status < 500 {
+				count4xx++
+			}
+			if s.Status >= 500 {
+				count5xx++
+			}
+
+			totalContainerCPU += s.ContainerCPU
+			totalMem += s.ContainerMemoryMB
+
+			if s.ContainerCPU > maxContainerCPU {
+				maxContainerCPU = s.ContainerCPU
+			}
+			if s.ContainerMemoryMB > maxMem {
+				maxMem = s.ContainerMemoryMB
+			}
 		}
 
-		if s.Status >= 400 && s.Status < 500 {
-			count4xx++
+		sort.Slice(latencies, func(i, j int) bool {
+			return latencies[i] < latencies[j]
+		})
+
+		avgLatency := int64(meanInt64(latencies))
+		p50 := percentile(latencies, 50)
+		p95 := percentile(latencies, 95)
+		p99 := percentile(latencies, 99)
+		latencyStd := stddev(latencies, avgLatency)
+		latencyJitter := jitter(latencies)
+
+		errorRate := float64(errorCount) / float64(totalRequests) * 100
+
+		expDuration := exp.UpdatedAt.Sub(exp.CreatedAt).Seconds()
+		if expDuration <= 0 {
+			expDuration = 1
 		}
-		if s.Status >= 500 {
-			count5xx++
+
+		throughput := float64(totalRequests) / expDuration
+
+		uptimePercent := 100.0
+		if expDuration > 0 {
+			uptimePercent = 100 - (o.totalDown[id].Seconds()/expDuration)*100
 		}
 
-		totalContainerCPU += s.ContainerCPU
-		totalMem += s.ContainerMemMB
+		avgContainerCPU := totalContainerCPU / float64(totalRequests)
+		avgMem := totalMem / float64(totalRequests)
 
-		if s.ContainerCPU > maxContainerCPU {
-			maxContainerCPU = s.ContainerCPU
+		stabilityScore := 100.0
+		stabilityScore -= errorRate * 0.5
+		if avgLatency > 0 {
+			stabilityScore -= (latencyStd / float64(avgLatency)) * 20
 		}
-		if s.ContainerMemMB > maxMem {
-			maxMem = s.ContainerMemMB
+		stabilityScore -= (100 - uptimePercent) * 0.5
+		if stabilityScore < 0 {
+			stabilityScore = 0
+		}
+
+		degraded := errorRate > 10 || p95 > avgLatency*2
+		if degraded {
+			degradedEndpoints++
+		}
+
+		endpointResults[endpoint] = map[string]interface{}{
+			"requests_total": totalRequests,
+			"throughput_rps": throughput,
+			"latency": map[string]interface{}{
+				"avg_ms":    avgLatency,
+				"p50_ms":    p50,
+				"p95_ms":    p95,
+				"p99_ms":    p99,
+				"stddev_ms": latencyStd,
+				"jitter_ms": latencyJitter,
+			},
+			"errors": map[string]interface{}{
+				"total":              errorCount,
+				"rate_percent":       errorRate,
+				"4xx":                count4xx,
+				"5xx":                count5xx,
+				"max_failure_streak": maxFailureStreak,
+			},
+			"container": map[string]interface{}{
+				"avg_cpu_percent": avgContainerCPU,
+				"max_cpu_percent": maxContainerCPU,
+				"avg_memory_mb":   avgMem,
+				"max_memory_mb":   maxMem,
+			},
+			"stability_score": stabilityScore,
+			"degraded":        degraded,
 		}
 	}
 
-	sort.Slice(latencies, func(i, j int) bool {
-		return latencies[i] < latencies[j]
-	})
-
-	avgLatency := int64(meanInt64(latencies))
-	p50 := percentile(latencies, 50)
-	p95 := percentile(latencies, 95)
-	p99 := percentile(latencies, 99)
-	latencyStd := stddev(latencies, avgLatency)
-	latencyJitter := jitter(latencies)
-
-	errorRate := float64(errorCount) / float64(totalRequests) * 100
-
-	exp := o.experiments[id]
-	endTime := time.Now()
-	if exp.State == models.StateCompleted {
-		endTime = exp.UpdatedAt
+	blastRadius := 0.0
+	if totalEndpoints > 0 {
+		blastRadius = float64(degradedEndpoints) / float64(totalEndpoints) * 100
 	}
 
-	totalDuration := endTime.Sub(exp.CreatedAt).Seconds()
-	throughput := float64(totalRequests) / totalDuration
+	result["endpoints"] = endpointResults
+	result["blast_radius_percent"] = blastRadius
+	result["total_requests"] = globalRequests
+	result["experiment_state"] = exp.State
 
-	uptimePercent := 100.0
-	if totalDuration > 0 {
-		uptimePercent = 100 - (o.totalDown[id].Seconds()/totalDuration)*100
-	}
-
-	var mttr float64
-	if o.failures[id] > 0 {
-		mttr = o.totalDown[id].Seconds() / float64(o.failures[id])
-	}
-
-	avgContainerCPU := totalContainerCPU / float64(totalRequests)
-	avgMem := totalMem / float64(totalRequests)
-
-	// Drift calculation
-	firstSegment := latencies[:len(latencies)/3]
-	lastSegment := latencies[len(latencies)*2/3:]
-	driftRatio := meanInt64(lastSegment) / meanInt64(firstSegment)
-
-	// Correlation between container CPU and latency
-	var latencyFloat []float64
-	for _, l := range latencies {
-		latencyFloat = append(latencyFloat, float64(l))
-	}
-	cpuLatencyCorrelation := correlation(containerCPUSeries, latencyFloat)
-
-	// Stability score
-	stabilityScore := 100.0
-	stabilityScore -= errorRate * 0.5
-	stabilityScore -= (latencyStd / float64(avgLatency)) * 20
-	stabilityScore -= (100 - uptimePercent) * 0.5
-	if stabilityScore < 0 {
-		stabilityScore = 0
-	}
-
-	availabilityClass := "unstable"
-	if uptimePercent >= 99.9 {
-		availabilityClass = "five_nines"
-	} else if uptimePercent >= 99 {
-		availabilityClass = "highly_available"
-	}
-
-	return map[string]interface{}{
-		"requests_total": totalRequests,
-		"throughput_rps": throughput,
-
-		"latency": map[string]interface{}{
-			"avg_ms":      avgLatency,
-			"p50_ms":      p50,
-			"p95_ms":      p95,
-			"p99_ms":      p99,
-			"stddev_ms":   latencyStd,
-			"jitter_ms":   latencyJitter,
-			"drift_ratio": driftRatio,
-		},
-
-		"errors": map[string]interface{}{
-			"total":              errorCount,
-			"rate_percent":       errorRate,
-			"4xx":                count4xx,
-			"5xx":                count5xx,
-			"max_failure_streak": maxFailureStreak,
-		},
-
-		"reliability": map[string]interface{}{
-			"downtime_seconds":      o.totalDown[id].Seconds(),
-			"uptime_percent":        uptimePercent,
-			"failure_count":         o.failures[id],
-			"mttr_seconds":          mttr,
-			"last_recovery_seconds": o.lastRecovery[id].Seconds(),
-			"availability_class":    availabilityClass,
-		},
-
-		"container": map[string]interface{}{
-			"avg_cpu_percent":         avgContainerCPU,
-			"max_cpu_percent":         maxContainerCPU,
-			"avg_memory_mb":           avgMem,
-			"max_memory_mb":           maxMem,
-			"cpu_saturation":          maxContainerCPU > 80,
-			"memory_pressure":         maxMem > 500,
-			"cpu_latency_correlation": cpuLatencyCorrelation,
-		},
-
-		"stability_score": stabilityScore,
-		"samples":         samples,
-	}, nil
+	return result, nil
 }
-
 func percentile(data []int64, p int) int64 {
 	sort.Slice(data, func(i, j int) bool {
 		return data[i] < data[j]

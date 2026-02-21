@@ -18,6 +18,13 @@ type dockerStats struct {
 	NetIO    string `json:"NetIO"`
 	BlockIO  string `json:"BlockIO"`
 }
+type ContainerStats struct {
+	CPUPercent    float64
+	MemoryMB      float64
+	MemoryPercent float64
+	NetworkIO     string
+	BlockIO       string
+}
 
 func NewManager() *Manager {
 	return &Manager{}
@@ -195,19 +202,26 @@ func (m *Manager) EnsureContainerReady(name, image, portMapping string) error {
 	return m.StartContainer(name)
 }
 
-// Docker stats for container
+// To run any docker exec command inside container
+func (m *Manager) Exec(container string, args ...string) error {
+	cmdArgs := append([]string{"exec", container}, args...)
 
-func (m *Manager) GetContainerStats(name string) (float64, float64, float64, string, string, error) {
+	_, err := m.run(cmdArgs...)
+	return err
+}
+
+// Docker stats for container
+func (m *Manager) GetContainerStats(name string) (*ContainerStats, error) {
 
 	out, err := m.run("stats", name, "--no-stream", "--format", "{{json .}}")
 	if err != nil {
-		return 0, 0, 0, "", "", err
+		return nil, err
 	}
 
 	var stats dockerStats
 	err = json.Unmarshal([]byte(out), &stats)
 	if err != nil {
-		return 0, 0, 0, "", "", err
+		return nil, err
 	}
 
 	cpuStr := strings.TrimSuffix(stats.CPUPerc, "%")
@@ -216,17 +230,30 @@ func (m *Manager) GetContainerStats(name string) (float64, float64, float64, str
 	memPctStr := strings.TrimSuffix(stats.MemPerc, "%")
 	memPctVal, _ := strconv.ParseFloat(memPctStr, 64)
 
-	// MemUsage format: "5.43MiB / 62.8MiB"
+	// MemUsage example: "5.43MiB / 62.8MiB"
 	memParts := strings.Split(stats.MemUsage, "/")
 	memVal := 0.0
 
 	if len(memParts) > 0 {
 		memValStr := strings.TrimSpace(memParts[0])
-		memValStr = strings.TrimSuffix(memValStr, "MiB")
-		memValStr = strings.TrimSuffix(memValStr, "GiB")
 
-		memVal, _ = strconv.ParseFloat(memValStr, 64)
+		if strings.Contains(memValStr, "MiB") {
+			memValStr = strings.TrimSuffix(memValStr, "MiB")
+			memVal, _ = strconv.ParseFloat(strings.TrimSpace(memValStr), 64)
+		}
+
+		if strings.Contains(memValStr, "GiB") {
+			memValStr = strings.TrimSuffix(memValStr, "GiB")
+			val, _ := strconv.ParseFloat(strings.TrimSpace(memValStr), 64)
+			memVal = val * 1024
+		}
 	}
 
-	return cpuVal, memVal, memPctVal, stats.NetIO, stats.BlockIO, nil
+	return &ContainerStats{
+		CPUPercent:    cpuVal,
+		MemoryMB:      memVal,
+		MemoryPercent: memPctVal,
+		NetworkIO:     stats.NetIO,
+		BlockIO:       stats.BlockIO,
+	}, nil
 }

@@ -42,12 +42,10 @@ Request Models
 */
 
 type StartRequest struct {
-	FaultType   string `json:"faultType"`
-	Image       string `json:"image"`
-	Container   string `json:"container"`
-	PortMapping string `json:"portMapping"`
-	TargetURL   string `json:"targetUrl"`
-	Duration    int    `json:"duration"`
+	FaultType         string   `json:"faultType"`
+	TargetContainers  []string `json:"targetContainers"`
+	ObservedEndpoints []string `json:"observedEndpoints"`
+	Duration          int      `json:"duration"`
 }
 
 /*
@@ -71,10 +69,8 @@ func startHandler(w http.ResponseWriter, r *http.Request, orch *orchestrator.Orc
 
 	exp, err := orch.StartExperiment(
 		req.FaultType,
-		req.Image,
-		req.Container,
-		req.PortMapping,
-		req.TargetURL,
+		req.TargetContainers,
+		req.ObservedEndpoints,
 		req.Duration,
 	)
 	if err != nil {
