@@ -45,6 +45,7 @@ type Experiment struct {
 	IntensityHistory   []int `json:"intensity_history"`
 
 	TimelineHistory map[int]IntensityTimeline `json:"timeline_history"`
+	Baseline        BaselineMetrics           `json:"baseline_metrics"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -54,4 +55,10 @@ type IntensityTimeline struct {
 	FaultStartedAt time.Time
 	FirstImpact    map[string]time.Time
 	RecoveryAt     map[string]time.Time
+}
+
+type BaselineMetrics struct {
+	AvgLatency float64
+	P95        int64
+	ErrorRate  float64
 }

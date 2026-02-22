@@ -169,11 +169,11 @@ func (o *Orchestrator) StartExperiment(
 
 	return exp, nil
 }
-
 func (o *Orchestrator) runTimeline(id string) {
 
 	o.setPhase(id, models.PhaseBaseline)
-	time.Sleep(5 * time.Second)
+	time.Sleep(6 * time.Second)
+	o.computeBaseline(id)
 
 	o.mu.Lock()
 	exp := o.experiments[id]
@@ -194,7 +194,6 @@ func (o *Orchestrator) runTimeline(id string) {
 	for low <= high {
 
 		mid := (low + high) / 2
-
 		startTime := time.Now()
 
 		o.mu.Lock()
@@ -203,16 +202,14 @@ func (o *Orchestrator) runTimeline(id string) {
 		exp.IntensityHistory = append(exp.IntensityHistory, mid)
 		exp.FaultStartedAt = startTime
 
-		// Reset round-specific state
+		if monitor, ok := o.monitors[id]; ok {
+			monitor.SetIntensity(mid)
+		}
+
+		// Reset round state
 		o.firstImpact[id] = make(map[string]time.Time)
 		o.recoveryAt[id] = make(map[string]time.Time)
 		delete(o.downtime, id)
-
-		exp.TimelineHistory[mid] = models.IntensityTimeline{
-			FaultStartedAt: startTime,
-			FirstImpact:    o.firstImpact[id],
-			RecoveryAt:     o.recoveryAt[id],
-		}
 
 		o.mu.Unlock()
 
@@ -226,7 +223,28 @@ func (o *Orchestrator) runTimeline(id string) {
 
 		_ = o.injector.Inject(config)
 
-		time.Sleep(6 * time.Second)
+		time.Sleep(10 * time.Second)
+
+		// Snapshot timeline safely
+		o.mu.Lock()
+
+		firstImpactCopy := make(map[string]time.Time)
+		for k, v := range o.firstImpact[id] {
+			firstImpactCopy[k] = v
+		}
+
+		recoveryCopy := make(map[string]time.Time)
+		for k, v := range o.recoveryAt[id] {
+			recoveryCopy[k] = v
+		}
+
+		exp.TimelineHistory[mid] = models.IntensityTimeline{
+			FaultStartedAt: startTime,
+			FirstImpact:    firstImpactCopy,
+			RecoveryAt:     recoveryCopy,
+		}
+
+		o.mu.Unlock()
 
 		if o.isExperimentDegraded(id, startTime) {
 			breaking = mid
@@ -301,24 +319,30 @@ func (o *Orchestrator) completeExperimentLocked(id string) {
 
 func (o *Orchestrator) isExperimentDegraded(id string, since time.Time) bool {
 
+	o.mu.Lock()
+	exp := o.experiments[id]
 	endpoints := o.metrics[id]
+	o.mu.Unlock()
+
+	breachCount := 0
 
 	for _, samples := range endpoints {
 
 		var windowed []models.MetricSample
 
 		for _, s := range samples {
-			if s.Timestamp.After(since) {
+			if s.Timestamp.After(since) &&
+				s.Intensity == exp.CurrentIntensity {
 				windowed = append(windowed, s)
 			}
 		}
 
-		if len(windowed) < 3 {
+		if len(windowed) < 5 {
 			continue
 		}
 
-		var errorCount int
 		var latencies []int64
+		var errorCount int
 
 		for _, s := range windowed {
 			latencies = append(latencies, s.LatencyMs)
@@ -327,16 +351,23 @@ func (o *Orchestrator) isExperimentDegraded(id string, since time.Time) bool {
 			}
 		}
 
-		errorRate := float64(errorCount) / float64(len(windowed)) * 100
-
 		sort.Slice(latencies, func(i, j int) bool {
 			return latencies[i] < latencies[j]
 		})
 
-		avgLatency := meanInt64(latencies)
 		p95 := percentile(latencies, 95)
+		errorRate := float64(errorCount) / float64(len(windowed)) * 100
 
-		if errorRate > 10 || p95 > int64(avgLatency*2) {
+		latencyRatio := float64(p95) / float64(exp.Baseline.P95)
+		errorDelta := errorRate - exp.Baseline.ErrorRate
+
+		if latencyRatio > 1.5 || errorDelta > 5 {
+			breachCount++
+		} else {
+			breachCount = 0
+		}
+
+		if breachCount >= 3 {
 			return true
 		}
 	}
@@ -383,20 +414,22 @@ func (o *Orchestrator) GetExperiment(id string) (*models.Experiment, error) {
 	copyExp := *exp
 	return &copyExp, nil
 }
+
 func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 
 	o.mu.Lock()
-	defer o.mu.Unlock()
-
 	exp, exists := o.experiments[id]
 	if !exists {
+		o.mu.Unlock()
 		return nil, errors.New("experiment not found")
 	}
 
 	endpointMap, exists := o.metrics[id]
 	if !exists {
+		o.mu.Unlock()
 		return nil, errors.New("no metrics found")
 	}
+	o.mu.Unlock()
 
 	result := make(map[string]interface{})
 	endpointResults := make(map[string]interface{})
@@ -419,16 +452,13 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 		globalRequests += totalRequests
 
 		var latencies []int64
-		var totalContainerCPU float64
-		var maxContainerCPU float64
+		var totalCPU float64
+		var maxCPU float64
 		var totalMem float64
 		var maxMem float64
-
 		var errorCount int
-		var count4xx int
-		var count5xx int
-		var currentFailureStreak int
 		var maxFailureStreak int
+		var currentStreak int
 
 		for _, s := range samples {
 
@@ -436,26 +466,19 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 
 			if s.Status >= 400 || s.Status == 0 {
 				errorCount++
-				currentFailureStreak++
-				if currentFailureStreak > maxFailureStreak {
-					maxFailureStreak = currentFailureStreak
+				currentStreak++
+				if currentStreak > maxFailureStreak {
+					maxFailureStreak = currentStreak
 				}
 			} else {
-				currentFailureStreak = 0
+				currentStreak = 0
 			}
 
-			if s.Status >= 400 && s.Status < 500 {
-				count4xx++
-			}
-			if s.Status >= 500 {
-				count5xx++
-			}
-
-			totalContainerCPU += s.ContainerCPU
+			totalCPU += s.ContainerCPU
 			totalMem += s.ContainerMemoryMB
 
-			if s.ContainerCPU > maxContainerCPU {
-				maxContainerCPU = s.ContainerCPU
+			if s.ContainerCPU > maxCPU {
+				maxCPU = s.ContainerCPU
 			}
 			if s.ContainerMemoryMB > maxMem {
 				maxMem = s.ContainerMemoryMB
@@ -470,113 +493,85 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 		p50 := percentile(latencies, 50)
 		p95 := percentile(latencies, 95)
 		p99 := percentile(latencies, 99)
-		latencyStd := stddev(latencies, avgLatency)
-		latencyJitter := jitter(latencies)
+		std := stddev(latencies, avgLatency)
+		jit := jitter(latencies)
 
 		errorRate := float64(errorCount) / float64(totalRequests) * 100
 
-		expDuration := exp.UpdatedAt.Sub(exp.CreatedAt).Seconds()
-		if expDuration <= 0 {
-			expDuration = 1
+		if exp.Baseline.P95 == 0 {
+			exp.Baseline.P95 = 1
 		}
 
-		throughput := float64(totalRequests) / expDuration
+		latencyRatio := float64(p95) / float64(exp.Baseline.P95)
+		errorDelta := errorRate - exp.Baseline.ErrorRate
 
-		uptimePercent := 100.0
-		if expDuration > 0 {
-			uptimePercent =
-				100 - (o.totalDown[id].Seconds()/expDuration)*100
-		}
-
-		avgContainerCPU := totalContainerCPU / float64(totalRequests)
-		avgMem := totalMem / float64(totalRequests)
-
-		stabilityScore := 100.0
-		stabilityScore -= errorRate * 0.5
-		if avgLatency > 0 {
-			stabilityScore -= (latencyStd / float64(avgLatency)) * 20
-		}
-		stabilityScore -= (100 - uptimePercent) * 0.5
-		if stabilityScore < 0 {
-			stabilityScore = 0
-		}
-
-		degraded := errorRate > 10 || p95 > avgLatency*2
+		degraded := latencyRatio > 1.5 || errorDelta > 5
 		if degraded {
 			degradedEndpoints++
 		}
 
-		// ---------------- FAILURE CLASSIFICATION ----------------
-
-		var failureMode string
-
 		if errorRate > 40 {
-			failureMode = "hard_failure"
 			hardFailures++
-		} else if errorRate > 10 {
-			failureMode = "error_spike"
-		} else if p95 > avgLatency*3 {
-			failureMode = "latency_collapse"
+		} else if latencyRatio > 2 {
 			latencyFailures++
-		} else if p95 > avgLatency*2 {
-			failureMode = "latency_degradation"
-			latencyFailures++
-		} else {
-			failureMode = "stable"
 		}
 
-		// ---------------- TIMELINE ----------------
+		// ---------------- TIMELINE FIX ----------------
 
-		breaking := exp.BreakingIntensity
-		timelineData, ok := exp.TimelineHistory[breaking]
+		selectedIntensity := exp.BreakingIntensity
+
+		if selectedIntensity == 0 {
+			selectedIntensity = exp.MaxStableIntensity
+		}
+
+		timelineData, ok := exp.TimelineHistory[selectedIntensity]
+
 		var faultStart time.Time
-		if ok {
-			faultStart = timelineData.FaultStartedAt
-		}
-
 		var propagationDelay float64
 		var recoveryDelay float64
 
 		if ok {
 
+			faultStart = timelineData.FaultStartedAt
+
 			if impactTime, exists := timelineData.FirstImpact[endpoint]; exists {
-				propagationDelay =
-					impactTime.Sub(timelineData.FaultStartedAt).Seconds()
+
+				if impactTime.After(faultStart) {
+					propagationDelay =
+						impactTime.Sub(faultStart).Seconds()
+				}
 
 				if recoveryTime, recExists := timelineData.RecoveryAt[endpoint]; recExists {
-					recoveryDelay =
-						recoveryTime.Sub(impactTime).Seconds()
+					if recoveryTime.After(impactTime) {
+						recoveryDelay =
+							recoveryTime.Sub(impactTime).Seconds()
+					}
 				}
 			}
 		}
 
 		endpointResults[endpoint] = map[string]interface{}{
 			"requests_total": totalRequests,
-			"throughput_rps": throughput,
 			"latency": map[string]interface{}{
 				"avg_ms":    avgLatency,
 				"p50_ms":    p50,
 				"p95_ms":    p95,
 				"p99_ms":    p99,
-				"stddev_ms": latencyStd,
-				"jitter_ms": latencyJitter,
+				"stddev_ms": std,
+				"jitter_ms": jit,
 			},
 			"errors": map[string]interface{}{
 				"total":              errorCount,
 				"rate_percent":       errorRate,
-				"4xx":                count4xx,
-				"5xx":                count5xx,
 				"max_failure_streak": maxFailureStreak,
 			},
 			"container": map[string]interface{}{
-				"avg_cpu_percent": avgContainerCPU,
-				"max_cpu_percent": maxContainerCPU,
-				"avg_memory_mb":   avgMem,
+				"avg_cpu_percent": totalCPU / float64(totalRequests),
+				"max_cpu_percent": maxCPU,
+				"avg_memory_mb":   totalMem / float64(totalRequests),
 				"max_memory_mb":   maxMem,
 			},
-			"stability_score": stabilityScore,
-			"degraded":        degraded,
-			"failure_mode":    failureMode,
+			"degraded": degraded,
 			"timeline": map[string]interface{}{
 				"fault_started_at":      faultStart,
 				"propagation_delay_sec": propagationDelay,
@@ -592,30 +587,21 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 				float64(totalEndpoints) * 100
 	}
 
-	var systemSeverity string
-	if blastRadius == 0 {
-		systemSeverity = "isolated"
-	} else if blastRadius < 50 {
-		systemSeverity = "partial"
-	} else if blastRadius < 100 {
-		systemSeverity = "major"
-	} else {
+	systemSeverity := "isolated"
+	if blastRadius >= 100 {
 		systemSeverity = "systemic"
+	} else if blastRadius >= 50 {
+		systemSeverity = "major"
+	} else if blastRadius > 0 {
+		systemSeverity = "partial"
 	}
 
 	result["endpoints"] = endpointResults
 	result["blast_radius_percent"] = blastRadius
+	result["system_severity"] = systemSeverity
 	result["total_requests"] = globalRequests
 	result["experiment_state"] = exp.State
 	result["experiment_phase"] = exp.Phase
-
-	result["system_severity"] = systemSeverity
-
-	result["failure_distribution"] = map[string]int{
-		"hard_failures":    hardFailures,
-		"latency_failures": latencyFailures,
-	}
-
 	result["resilience_threshold"] = map[string]interface{}{
 		"max_stable_intensity": exp.MaxStableIntensity,
 		"breaking_intensity":   exp.BreakingIntensity,
@@ -624,7 +610,6 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 
 	return result, nil
 }
-
 func percentile(data []int64, p int) int64 {
 	sort.Slice(data, func(i, j int) bool {
 		return data[i] < data[j]
@@ -698,4 +683,47 @@ func correlation(x []float64, y []float64) float64 {
 		return 0
 	}
 	return num / den
+}
+
+func (o *Orchestrator) computeBaseline(id string) {
+
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	exp := o.experiments[id]
+	endpoints := o.metrics[id]
+
+	var allSamples []models.MetricSample
+
+	for _, samples := range endpoints {
+		allSamples = append(allSamples, samples...)
+	}
+
+	if len(allSamples) == 0 {
+		return
+	}
+
+	var latencies []int64
+	var errorCount int
+
+	for _, s := range allSamples {
+		latencies = append(latencies, s.LatencyMs)
+		if s.Status >= 400 || s.Status == 0 {
+			errorCount++
+		}
+	}
+
+	sort.Slice(latencies, func(i, j int) bool {
+		return latencies[i] < latencies[j]
+	})
+
+	avgLatency := meanInt64(latencies)
+	p95 := percentile(latencies, 95)
+	errorRate := float64(errorCount) / float64(len(allSamples)) * 100
+
+	exp.Baseline = models.BaselineMetrics{
+		AvgLatency: avgLatency,
+		P95:        p95,
+		ErrorRate:  errorRate,
+	}
 }

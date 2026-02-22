@@ -5,6 +5,7 @@ import "time"
 type MetricSample struct {
 	Timestamp time.Time `json:"timestamp"`
 	Endpoint  string    `json:"endpoint"`
+	Intensity int       `json:"intensity"`
 
 	// System-level metrics
 	CPU       float64 `json:"cpu_percent"`

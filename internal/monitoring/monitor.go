@@ -29,6 +29,8 @@ type Monitor struct {
 
 	dockerManager *docker.Manager
 	containers    []string
+
+	CurrentIntensity int
 }
 
 func NewMonitor(
@@ -45,6 +47,10 @@ func NewMonitor(
 		consecutiveErr: make(map[string]int),
 		isDown:         make(map[string]bool),
 	}
+}
+
+func (m *Monitor) SetIntensity(i int) {
+	m.CurrentIntensity = i
 }
 
 func (m *Monitor) Start(experimentID string, endpoints []string) {
@@ -105,8 +111,9 @@ func (m *Monitor) collect(experimentID string, endpoints []string) {
 		totalMemPercent /= containerCount
 	}
 
-	client := http.Client{Timeout: 2 * time.Second}
-
+	client := &http.Client{
+		Timeout: 2 * time.Second,
+	}
 	// ---------------- PER-ENDPOINT MONITORING ----------------
 
 	for _, url := range endpoints {
@@ -144,11 +151,12 @@ func (m *Monitor) collect(experimentID string, endpoints []string) {
 			ContainerMemPercent: totalMemPercent,
 			ContainerNetIO:      totalNetIO,
 			ContainerBlockIO:    totalBlockIO,
+			Intensity:           m.CurrentIntensity,
 		}
 
 		// Emit sample
 		if m.callback != nil {
-			m.callback("", sample)
+			m.callback(EventType("sample"), sample)
 		}
 
 		// -------- DOWN DETECTION PER ENDPOINT --------
