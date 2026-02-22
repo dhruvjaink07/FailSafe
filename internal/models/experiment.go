@@ -2,6 +2,8 @@ package models
 
 import "time"
 
+type DependencyGraph map[string][]string
+
 type ExperimentState string
 
 const (
@@ -46,6 +48,8 @@ type Experiment struct {
 
 	TimelineHistory map[int]IntensityTimeline `json:"timeline_history"`
 	Baseline        BaselineMetrics           `json:"baseline_metrics"`
+
+	DependencyGraph DependencyGraph `json:"dependency_graph"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

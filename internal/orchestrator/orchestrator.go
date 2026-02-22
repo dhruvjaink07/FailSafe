@@ -60,6 +60,7 @@ func (o *Orchestrator) StartExperiment(
 	adaptive bool,
 	stepIntensity int,
 	maxIntensity int,
+	deps models.DependencyGraph,
 ) (*models.Experiment, error) {
 
 	if duration <= 0 {
@@ -96,6 +97,7 @@ func (o *Orchestrator) StartExperiment(
 		MaxStableIntensity: 0,
 		BreakingIntensity:  0,
 		TimelineHistory:    make(map[int]models.IntensityTimeline),
+		DependencyGraph:    deps,
 	}
 
 	o.mu.Lock()
@@ -438,8 +440,7 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 	degradedEndpoints := 0
 	globalRequests := 0
 
-	hardFailures := 0
-	latencyFailures := 0
+	degradedMap := make(map[string]bool)
 
 	for endpoint, samples := range endpointMap {
 
@@ -498,6 +499,7 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 
 		errorRate := float64(errorCount) / float64(totalRequests) * 100
 
+		// ---- Baseline Safety ----
 		if exp.Baseline.P95 == 0 {
 			exp.Baseline.P95 = 1
 		}
@@ -506,20 +508,15 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 		errorDelta := errorRate - exp.Baseline.ErrorRate
 
 		degraded := latencyRatio > 1.5 || errorDelta > 5
+
 		if degraded {
 			degradedEndpoints++
+			degradedMap[endpoint] = true
 		}
 
-		if errorRate > 40 {
-			hardFailures++
-		} else if latencyRatio > 2 {
-			latencyFailures++
-		}
-
-		// ---------------- TIMELINE FIX ----------------
+		// ---- Timeline Selection ----
 
 		selectedIntensity := exp.BreakingIntensity
-
 		if selectedIntensity == 0 {
 			selectedIntensity = exp.MaxStableIntensity
 		}
@@ -580,6 +577,8 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 		}
 	}
 
+	// ---- Blast Radius ----
+
 	blastRadius := 0.0
 	if totalEndpoints > 0 {
 		blastRadius =
@@ -587,9 +586,18 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 				float64(totalEndpoints) * 100
 	}
 
+	// ---- Cascade Depth ----
+
+	cascadeDepth := o.computeCascadeDepth(exp, degradedMap)
+
+	// ---- System Severity ----
+
 	systemSeverity := "isolated"
-	if blastRadius >= 100 {
+
+	if cascadeDepth >= 3 {
 		systemSeverity = "systemic"
+	} else if cascadeDepth == 2 {
+		systemSeverity = "propagated"
 	} else if blastRadius >= 50 {
 		systemSeverity = "major"
 	} else if blastRadius > 0 {
@@ -598,10 +606,12 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 
 	result["endpoints"] = endpointResults
 	result["blast_radius_percent"] = blastRadius
+	result["cascade_depth"] = cascadeDepth
 	result["system_severity"] = systemSeverity
 	result["total_requests"] = globalRequests
 	result["experiment_state"] = exp.State
 	result["experiment_phase"] = exp.Phase
+
 	result["resilience_threshold"] = map[string]interface{}{
 		"max_stable_intensity": exp.MaxStableIntensity,
 		"breaking_intensity":   exp.BreakingIntensity,
@@ -610,6 +620,7 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 
 	return result, nil
 }
+
 func percentile(data []int64, p int) int64 {
 	sort.Slice(data, func(i, j int) bool {
 		return data[i] < data[j]
@@ -726,4 +737,37 @@ func (o *Orchestrator) computeBaseline(id string) {
 		P95:        p95,
 		ErrorRate:  errorRate,
 	}
+}
+
+// Handling Dependency Graph
+func (o *Orchestrator) computeCascadeDepth(exp *models.Experiment, degraded map[string]bool) int {
+
+	visited := make(map[string]bool)
+	maxDepth := 0
+
+	var dfs func(node string, depth int)
+
+	dfs = func(node string, depth int) {
+		if visited[node] {
+			return
+		}
+		visited[node] = true
+
+		if depth > maxDepth {
+			maxDepth = depth
+		}
+
+		for _, dep := range exp.DependencyGraph[node] {
+			if degraded[dep] {
+				dfs(dep, depth+1)
+			}
+		}
+	}
+	for endpoint := range degraded {
+		if degraded[endpoint] {
+			dfs(endpoint, 1)
+		}
+	}
+
+	return maxDepth
 }

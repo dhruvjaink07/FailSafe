@@ -1,58 +1,59 @@
 {
-    "blast_radius_percent": 50,
+    "blast_radius_percent": 100,
+    "cascade_depth": 1,
     "endpoints": {
         "http://localhost:8081": {
             "container": {
-                "avg_cpu_percent": 0.13342105263157897,
-                "avg_memory_mb": 5.1157894736842096,
-                "max_cpu_percent": 1.14,
-                "max_memory_mb": 14.13
+                "avg_cpu_percent": 0.0262,
+                "avg_memory_mb": 7.695400000000001,
+                "max_cpu_percent": 1.31,
+                "max_memory_mb": 22.17
             },
             "degraded": true,
             "errors": {
-                "max_failure_streak": 7,
-                "rate_percent": 63.1578947368421,
-                "total": 48
+                "max_failure_streak": 4,
+                "rate_percent": 48,
+                "total": 24
             },
             "latency": {
-                "avg_ms": 2,
-                "jitter_ms": 0.16,
+                "avg_ms": 3,
+                "jitter_ms": 0.22448979591836735,
                 "p50_ms": 2,
-                "p95_ms": 8,
-                "p99_ms": 9,
-                "stddev_ms": 2.774413166969302
+                "p95_ms": 7,
+                "p99_ms": 8,
+                "stddev_ms": 2.734958866235469
             },
-            "requests_total": 76,
+            "requests_total": 50,
             "timeline": {
-                "fault_started_at": "2026-02-22T18:11:14.4625402+05:30",
-                "propagation_delay_sec": 2.0493634,
-                "recovery_delay_sec": 5.0286899
+                "fault_started_at": "2026-02-22T21:47:23.9184446+05:30",
+                "propagation_delay_sec": 5.3239969,
+                "recovery_delay_sec": 2.068551
             }
         },
         "http://localhost:8082": {
             "container": {
-                "avg_cpu_percent": 0.0817741935483871,
-                "avg_memory_mb": 4.701935483870967,
-                "max_cpu_percent": 1.14,
-                "max_memory_mb": 14.13
+                "avg_cpu_percent": 0.031190476190476192,
+                "avg_memory_mb": 7.841904761904762,
+                "max_cpu_percent": 1.31,
+                "max_memory_mb": 22.17
             },
-            "degraded": false,
+            "degraded": true,
             "errors": {
-                "max_failure_streak": 0,
-                "rate_percent": 0,
-                "total": 0
+                "max_failure_streak": 4,
+                "rate_percent": 38.095238095238095,
+                "total": 16
             },
             "latency": {
-                "avg_ms": 1,
-                "jitter_ms": 0.04918032786885246,
+                "avg_ms": 814,
+                "jitter_ms": 48.78048780487805,
                 "p50_ms": 2,
-                "p95_ms": 2,
-                "p99_ms": 3,
-                "stddev_ms": 1.031753909143192
+                "p95_ms": 2000,
+                "p99_ms": 2001,
+                "stddev_ms": 1164.9807271577124
             },
-            "requests_total": 62,
+            "requests_total": 42,
             "timeline": {
-                "fault_started_at": "2026-02-22T18:11:14.4625402+05:30",
+                "fault_started_at": "2026-02-22T21:47:23.9184446+05:30",
                 "propagation_delay_sec": 0,
                 "recovery_delay_sec": 0
             }
@@ -74,5 +75,5 @@
         "max_stable_intensity": 100
     },
     "system_severity": "major",
-    "total_requests": 138
+    "total_requests": 92
 }

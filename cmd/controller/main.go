@@ -47,9 +47,10 @@ type StartRequest struct {
 	ObservedEndpoints []string `json:"observedEndpoints"`
 	Duration          int      `json:"duration"`
 
-	Adaptive      bool `json:"adaptive"`
-	StepIntensity int  `json:"stepIntensity"`
-	MaxIntensity  int  `json:"maxIntensity"`
+	Adaptive        bool                `json:"adaptive"`
+	StepIntensity   int                 `json:"stepIntensity"`
+	MaxIntensity    int                 `json:"maxIntensity"`
+	DependencyGraph map[string][]string `json:"dependencyGraph"`
 }
 
 /*
@@ -79,6 +80,7 @@ func startHandler(w http.ResponseWriter, r *http.Request, orch *orchestrator.Orc
 		req.Adaptive,
 		req.StepIntensity,
 		req.MaxIntensity,
+		req.DependencyGraph,
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
