@@ -3,42 +3,43 @@
     "endpoints": {
         "http://localhost:8081": {
             "container": {
-                "avg_cpu_percent": 0,
-                "avg_memory_mb": 2.9886956521739134,
-                "max_cpu_percent": 0,
-                "max_memory_mb": 13.88
+                "avg_cpu_percent": 0.0019047619047619048,
+                "avg_memory_mb": 3.2919047619047617,
+                "max_cpu_percent": 0.04,
+                "max_memory_mb": 14.04
             },
             "degraded": true,
             "errors": {
                 "4xx": 0,
                 "5xx": 0,
-                "max_failure_streak": 18,
-                "rate_percent": 78.26086956521739,
-                "total": 18
+                "max_failure_streak": 26,
+                "rate_percent": 76.19047619047619,
+                "total": 32
             },
+            "failure_mode": "hard_failure",
             "latency": {
-                "avg_ms": 4,
-                "jitter_ms": 2.3181818181818183,
+                "avg_ms": 2,
+                "jitter_ms": 0.2926829268292683,
                 "p50_ms": 1,
-                "p95_ms": 6,
-                "p99_ms": 10,
-                "stddev_ms": 10.266026706950752
+                "p95_ms": 7,
+                "p99_ms": 8,
+                "stddev_ms": 2.781743201320934
             },
-            "requests_total": 23,
-            "stability_score": 0,
-            "throughput_rps": 0.9999825437829858,
+            "requests_total": 42,
+            "stability_score": 29.68305921705234,
+            "throughput_rps": 0.9129601388930603,
             "timeline": {
-                "fault_started_at": "2026-02-22T15:01:53.6691914+05:30",
-                "propagation_delay_sec": 2.0564651,
-                "recovery_delay_sec": 16.052641
+                "fault_started_at": "2026-02-22T17:32:00.8935988+05:30",
+                "propagation_delay_sec": 3.0518299,
+                "recovery_delay_sec": 4.0522989
             }
         },
         "http://localhost:8082": {
             "container": {
-                "avg_cpu_percent": 0,
-                "avg_memory_mb": 2.6123809523809522,
-                "max_cpu_percent": 0,
-                "max_memory_mb": 13.88
+                "avg_cpu_percent": 0.0010526315789473684,
+                "avg_memory_mb": 2.912894736842105,
+                "max_cpu_percent": 0.04,
+                "max_memory_mb": 14.04
             },
             "degraded": false,
             "errors": {
@@ -48,19 +49,20 @@
                 "rate_percent": 0,
                 "total": 0
             },
+            "failure_mode": "stable",
             "latency": {
-                "avg_ms": 4,
-                "jitter_ms": 0.25,
-                "p50_ms": 4,
-                "p95_ms": 6,
-                "p99_ms": 6,
-                "stddev_ms": 1.2344267996967353
+                "avg_ms": 2,
+                "jitter_ms": 0.05405405405405406,
+                "p50_ms": 2,
+                "p95_ms": 3,
+                "p99_ms": 3,
+                "stddev_ms": 0.36273812505500586
             },
-            "requests_total": 21,
-            "stability_score": 58.931429519744476,
-            "throughput_rps": 0.9130275399757696,
+            "requests_total": 38,
+            "stability_score": 91.96834807494972,
+            "throughput_rps": 0.8260115542365783,
             "timeline": {
-                "fault_started_at": "2026-02-22T15:01:53.6691914+05:30",
+                "fault_started_at": "2026-02-22T17:32:00.8935988+05:30",
                 "propagation_delay_sec": 0,
                 "recovery_delay_sec": 0
             }
@@ -68,5 +70,22 @@
     },
     "experiment_phase": "completed",
     "experiment_state": "completed",
-    "total_requests": 44
+    "failure_distribution": {
+        "hard_failures": 1,
+        "latency_failures": 0
+    },
+    "resilience_threshold": {
+        "breaking_intensity": 0,
+        "intensity_steps": [
+            50,
+            24,
+            11,
+            5,
+            2,
+            0
+        ],
+        "max_stable_intensity": 0
+    },
+    "system_severity": "major",
+    "total_requests": 80
 }

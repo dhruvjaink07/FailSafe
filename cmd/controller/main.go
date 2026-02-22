@@ -46,6 +46,10 @@ type StartRequest struct {
 	TargetContainers  []string `json:"targetContainers"`
 	ObservedEndpoints []string `json:"observedEndpoints"`
 	Duration          int      `json:"duration"`
+
+	Adaptive      bool `json:"adaptive"`
+	StepIntensity int  `json:"stepIntensity"`
+	MaxIntensity  int  `json:"maxIntensity"`
 }
 
 /*
@@ -72,6 +76,9 @@ func startHandler(w http.ResponseWriter, r *http.Request, orch *orchestrator.Orc
 		req.TargetContainers,
 		req.ObservedEndpoints,
 		req.Duration,
+		req.Adaptive,
+		req.StepIntensity,
+		req.MaxIntensity,
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)

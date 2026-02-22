@@ -34,6 +34,24 @@ type Experiment struct {
 	Phase ExperimentPhase `json:"phase"`
 
 	FaultStartedAt time.Time `json:"fault_started_at"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	Intensity      int       `json:"intensity"`
+	Adaptive       bool      `json:"adaptive"`
+	MaxIntensity   int       `json:"max_intensity"`
+	StepIntensity  int       `json:"step_intensity"`
+
+	CurrentIntensity   int   `json:"current_intensity"`
+	MaxStableIntensity int   `json:"max_stable_intensity"`
+	BreakingIntensity  int   `json:"breaking_intensity"`
+	IntensityHistory   []int `json:"intensity_history"`
+
+	TimelineHistory map[int]IntensityTimeline `json:"timeline_history"`
+
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type IntensityTimeline struct {
+	FaultStartedAt time.Time
+	FirstImpact    map[string]time.Time
+	RecoveryAt     map[string]time.Time
 }
