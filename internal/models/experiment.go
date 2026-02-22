@@ -33,6 +33,7 @@ type Experiment struct {
 	State ExperimentState `json:"state"`
 	Phase ExperimentPhase `json:"phase"`
 
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	FaultStartedAt time.Time `json:"fault_started_at"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }

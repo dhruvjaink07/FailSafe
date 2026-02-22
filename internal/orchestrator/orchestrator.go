@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"errors"
+	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -25,8 +26,10 @@ type Orchestrator struct {
 	failures     map[string]int
 	lastRecovery map[string]time.Duration
 
-	docker   *docker.Manager
-	injector *fault.MockInjector
+	docker      *docker.Manager
+	injector    *fault.MockInjector
+	firstImpact map[string]map[string]time.Time
+	recoveryAt  map[string]map[string]time.Time
 
 	mu sync.Mutex
 }
@@ -43,6 +46,8 @@ func NewOrchestrator() *Orchestrator {
 		totalDown:    make(map[string]time.Duration),
 		failures:     make(map[string]int),
 		lastRecovery: make(map[string]time.Duration),
+		firstImpact:  make(map[string]map[string]time.Time),
+		recoveryAt:   make(map[string]map[string]time.Time),
 		docker:       dm,
 		injector:     fault.NewMockInjector(dm), // Replace with RustInjector later
 	}
@@ -92,6 +97,8 @@ func (o *Orchestrator) StartExperiment(
 	}
 	o.totalDown[id] = 0
 	o.failures[id] = 0
+	o.firstImpact[id] = make(map[string]time.Time)
+	o.recoveryAt[id] = make(map[string]time.Time)
 	o.mu.Unlock()
 
 	callback := func(event monitoring.EventType, sample models.MetricSample) {
@@ -104,17 +111,39 @@ func (o *Orchestrator) StartExperiment(
 		switch event {
 
 		case monitoring.EventDown:
+			if _, exists := o.firstImpact[id][sample.Endpoint]; !exists {
+				fmt.Println("First Impact At ", time.Now())
+				o.firstImpact[id][sample.Endpoint] = time.Now()
+			}
 			if _, exists := o.downtime[id]; !exists {
 				o.downtime[id] = time.Now()
 				o.failures[id]++
 			}
 
 		case monitoring.EventRecovered:
+			if _, impacted := o.firstImpact[id][sample.Endpoint]; impacted {
+				if _, recorded := o.recoveryAt[id][sample.Endpoint]; !recorded {
+					fmt.Println("Recovered At ", time.Now())
+					o.recoveryAt[id][sample.Endpoint] = time.Now()
+				}
+			}
 			if start, ok := o.downtime[id]; ok {
-				recoveryTime := time.Since(start)
-				o.totalDown[id] += recoveryTime
-				o.lastRecovery[id] = recoveryTime
-				delete(o.downtime, id)
+
+				// Only clear downtime when ALL endpoints recovered
+				allRecovered := true
+				for ep := range o.firstImpact[id] {
+					if _, recovered := o.recoveryAt[id][ep]; !recovered {
+						allRecovered = false
+						break
+					}
+				}
+
+				if allRecovered {
+					recoveryTime := time.Since(start)
+					o.totalDown[id] += recoveryTime
+					o.lastRecovery[id] = recoveryTime
+					delete(o.downtime, id)
+				}
 			}
 		}
 	}
@@ -134,14 +163,16 @@ func (o *Orchestrator) StartExperiment(
 
 func (o *Orchestrator) runTimeline(id string) {
 
+	// ---- BASELINE ----
 	o.setPhase(id, models.PhaseBaseline)
-
 	time.Sleep(5 * time.Second)
 
+	// ---- INJECTION ----
 	o.setPhase(id, models.PhaseInjecting)
 
 	o.mu.Lock()
 	exp := o.experiments[id]
+	exp.FaultStartedAt = time.Now()
 	o.mu.Unlock()
 
 	config := fault.FaultConfig{
@@ -153,13 +184,17 @@ func (o *Orchestrator) runTimeline(id string) {
 
 	_ = o.injector.Inject(config)
 
+	// ---- RECOVERY PHASE ----
 	o.setPhase(id, models.PhaseRecovering)
 
-	time.Sleep(5 * time.Second)
+	// Give monitor enough time to detect recovery
+	time.Sleep(time.Duration(exp.Duration/2) * time.Second)
+
+	// Extra buffer to ensure recovery detection
+	time.Sleep(3 * time.Second)
 
 	o.completeExperiment(id)
 }
-
 func (o *Orchestrator) setPhase(id string, phase models.ExperimentPhase) {
 
 	o.mu.Lock()
@@ -224,7 +259,6 @@ func (o *Orchestrator) GetExperiment(id string) (*models.Experiment, error) {
 	copyExp := *exp
 	return &copyExp, nil
 }
-
 func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 
 	o.mu.Lock()
@@ -245,7 +279,6 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 
 	totalEndpoints := 0
 	degradedEndpoints := 0
-
 	globalRequests := 0
 
 	for endpoint, samples := range endpointMap {
@@ -259,7 +292,6 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 		globalRequests += totalRequests
 
 		var latencies []int64
-		var containerCPUSeries []float64
 		var totalContainerCPU float64
 		var maxContainerCPU float64
 		var totalMem float64
@@ -274,7 +306,6 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 		for _, s := range samples {
 
 			latencies = append(latencies, s.LatencyMs)
-			containerCPUSeries = append(containerCPUSeries, s.ContainerCPU)
 
 			if s.Status >= 400 || s.Status == 0 {
 				errorCount++
@@ -347,6 +378,23 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 			degradedEndpoints++
 		}
 
+		// ---------------- Timeline Calculation ----------------
+
+		faultStart := exp.FaultStartedAt
+
+		var propagationDelay float64
+		var recoveryDelay float64
+
+		if impactTime, ok := o.firstImpact[id][endpoint]; ok && !faultStart.IsZero() {
+			propagationDelay = impactTime.Sub(faultStart).Seconds()
+		}
+
+		if recoveryTime, ok := o.recoveryAt[id][endpoint]; ok {
+			if impactTime, ok2 := o.firstImpact[id][endpoint]; ok2 {
+				recoveryDelay = recoveryTime.Sub(impactTime).Seconds()
+			}
+		}
+
 		endpointResults[endpoint] = map[string]interface{}{
 			"requests_total": totalRequests,
 			"throughput_rps": throughput,
@@ -373,6 +421,11 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 			},
 			"stability_score": stabilityScore,
 			"degraded":        degraded,
+			"timeline": map[string]interface{}{
+				"fault_started_at":      faultStart,
+				"propagation_delay_sec": propagationDelay,
+				"recovery_delay_sec":    recoveryDelay,
+			},
 		}
 	}
 
@@ -385,9 +438,11 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 	result["blast_radius_percent"] = blastRadius
 	result["total_requests"] = globalRequests
 	result["experiment_state"] = exp.State
+	result["experiment_phase"] = exp.Phase
 
 	return result, nil
 }
+
 func percentile(data []int64, p int) int64 {
 	sort.Slice(data, func(i, j int) bool {
 		return data[i] < data[j]

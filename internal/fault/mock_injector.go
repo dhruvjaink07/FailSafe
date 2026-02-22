@@ -59,12 +59,18 @@ func (m *MockInjector) injectMemory(config FaultConfig) {
 }
 
 func (m *MockInjector) injectKill(config FaultConfig) {
+
+	// Stop all target containers
 	for _, container := range config.Containers {
-		m.docker.StopContainer(container)
-		time.Sleep(time.Duration(config.DurationSeconds) * time.Second)
-		for _, container := range config.Containers {
-			m.docker.StartContainer(container)
-		}
+		_ = m.docker.StopContainer(container)
+	}
+
+	// Hold fault duration
+	time.Sleep(time.Duration(config.DurationSeconds) * time.Second)
+
+	// Restart all containers
+	for _, container := range config.Containers {
+		_ = m.docker.StartContainer(container)
 	}
 }
 
