@@ -14,6 +14,7 @@ type EventType string
 const (
 	EventDown      EventType = "down"
 	EventRecovered EventType = "recovered"
+	EventDegraded  EventType = "degraded" // NEW
 )
 
 type EventCallback func(event EventType, sample models.MetricSample)
@@ -21,7 +22,6 @@ type EventCallback func(event EventType, sample models.MetricSample)
 type Monitor struct {
 	stopChan chan struct{}
 
-	// Track failure streak per endpoint
 	consecutiveErr map[string]int
 	isDown         map[string]bool
 
@@ -55,7 +55,7 @@ func (m *Monitor) SetIntensity(i int) {
 
 func (m *Monitor) Start(experimentID string, endpoints []string) {
 
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(500 * time.Millisecond) // IMPROVED PRECISION
 
 	go func() {
 		for {
@@ -74,15 +74,11 @@ func (m *Monitor) Start(experimentID string, endpoints []string) {
 
 func (m *Monitor) collect(experimentID string, endpoints []string) {
 
-	// ---------------- HOST CPU ----------------
-
 	hostCPU := 0.0
 	cpuPercent, err := cpu.Percent(0, false)
 	if err == nil && len(cpuPercent) > 0 {
 		hostCPU = cpuPercent[0]
 	}
-
-	// ---------------- CONTAINER STATS ----------------
 
 	var totalContainerCPU float64
 	var totalMem float64
@@ -112,9 +108,8 @@ func (m *Monitor) collect(experimentID string, endpoints []string) {
 	}
 
 	client := &http.Client{
-		Timeout: 2 * time.Second,
+		Timeout: 500 * time.Millisecond,
 	}
-	// ---------------- PER-ENDPOINT MONITORING ----------------
 
 	for _, url := range endpoints {
 
@@ -154,12 +149,32 @@ func (m *Monitor) collect(experimentID string, endpoints []string) {
 			Intensity:           m.CurrentIntensity,
 		}
 
-		// Emit sample
+		// always emit sample
 		if m.callback != nil {
 			m.callback(EventType("sample"), sample)
 		}
 
-		// -------- DOWN DETECTION PER ENDPOINT --------
+		// -------- ADAPTIVE DEGRADATION DETECTION --------
+
+		// dynamic threshold based on baseline
+		baseline := m.getBaselineP95(url)
+		threshold := int(float64(baseline) * 2.0)
+
+		// safeguard for low-latency systems (like nginx)
+		if threshold < 20 {
+			threshold = 20
+		}
+
+		latencyDegraded := latency.Milliseconds() > int64(threshold)
+		errorDegraded := m.consecutiveErr[url] == 1
+
+		if latencyDegraded || errorDegraded {
+			if m.callback != nil {
+				m.callback(EventDegraded, sample)
+			}
+		}
+
+		// -------- DOWN DETECTION --------
 
 		if m.consecutiveErr[url] >= 3 && !m.isDown[url] {
 			m.isDown[url] = true
@@ -168,7 +183,7 @@ func (m *Monitor) collect(experimentID string, endpoints []string) {
 			}
 		}
 
-		// -------- RECOVERY DETECTION PER ENDPOINT --------
+		// -------- RECOVERY DETECTION --------
 
 		if success && m.isDown[url] {
 			m.isDown[url] = false
@@ -181,4 +196,10 @@ func (m *Monitor) collect(experimentID string, endpoints []string) {
 
 func (m *Monitor) Stop() {
 	close(m.stopChan)
+}
+
+func (m *Monitor) getBaselineP95(endpoint string) int64 {
+	// fallback static baseline for now
+	// orchestrator already computes real baseline
+	return 5
 }

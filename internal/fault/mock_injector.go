@@ -2,6 +2,7 @@ package fault
 
 import (
 	"fmt"
+	"math"
 	"os/exec"
 	"strconv"
 	"time"
@@ -20,10 +21,13 @@ func NewMockInjector(dm *docker.Manager) *MockInjector {
 }
 
 func (m *MockInjector) Inject(config FaultConfig) error {
+
+	fmt.Printf("Injecting %s at intensity %d on %v\n",
+		config.Type, config.Intensity, config.Containers)
+
 	go func() {
 		switch config.Type {
 		case FaultCPU:
-			// Simulate CPU stress by running a busy loop for the duration
 			m.injectCPUStress(config)
 		case FaultMemory:
 			m.injectMemoryStress(config)
@@ -39,11 +43,17 @@ func (m *MockInjector) Inject(config FaultConfig) error {
 	return nil
 }
 
+// ---------------- CPU ----------------
+
 func (m *MockInjector) injectCPUStress(config FaultConfig) error {
 
-	intensity := config.Intensity
-	if intensity <= 0 {
-		intensity = 50
+	// ensure stress exists
+	for _, container := range config.Containers {
+		exec.Command(
+			"docker", "exec", container,
+			"sh", "-c",
+			"which stress || (apt update && apt install -y stress)",
+		).Run()
 	}
 
 	for _, container := range config.Containers {
@@ -51,21 +61,41 @@ func (m *MockInjector) injectCPUStress(config FaultConfig) error {
 		cmd := exec.Command(
 			"docker", "exec", container,
 			"sh", "-c",
-			fmt.Sprintf("stress --cpu 1 --timeout %d", config.DurationSeconds),
+			fmt.Sprintf(
+				"stress --cpu %d --timeout %d",
+				max(1, config.Intensity/20),
+				config.DurationSeconds,
+			),
 		)
 
-		_ = cmd.Start()
+		if err := cmd.Start(); err != nil {
+			fmt.Println("cpu inject error:", err)
+		}
 	}
 
 	time.Sleep(time.Duration(config.DurationSeconds) * time.Second)
 	return nil
 }
 
+// ---------------- MEMORY ----------------
+
 func (m *MockInjector) injectMemoryStress(config FaultConfig) error {
 
-	memMB := config.Intensity * 10
+	memMB := config.Intensity * 50
+	if memMB > 1024 {
+		memMB = 1024
+	}
 	if memMB <= 0 {
 		memMB = 100
+	}
+
+	// ensure stress exists
+	for _, container := range config.Containers {
+		exec.Command(
+			"docker", "exec", container,
+			"sh", "-c",
+			"which stress || (apt update && apt install -y stress)",
+		).Run()
 	}
 
 	for _, container := range config.Containers {
@@ -73,80 +103,165 @@ func (m *MockInjector) injectMemoryStress(config FaultConfig) error {
 		cmd := exec.Command(
 			"docker", "exec", container,
 			"sh", "-c",
-			fmt.Sprintf("stress --vm 1 --vm-bytes %dM --timeout %d",
+			fmt.Sprintf(
+				"stress --vm %d --vm-bytes %dM --timeout %d",
+				max(1, config.Intensity/25),
 				memMB,
 				config.DurationSeconds,
 			),
 		)
 
-		_ = cmd.Start()
+		if err := cmd.Start(); err != nil {
+			fmt.Println("memory inject error:", err)
+		}
 	}
 
 	time.Sleep(time.Duration(config.DurationSeconds) * time.Second)
+
+	// cleanup
+	for _, container := range config.Containers {
+		exec.Command(
+			"docker", "exec", container,
+			"pkill", "-f", "stress",
+		).Run()
+	}
+
 	return nil
 }
+
+// ---------------- KILL ----------------
 
 func (m *MockInjector) injectKill(config FaultConfig) error {
 
-	for _, container := range config.Containers {
-		_ = m.docker.StopContainer(container)
-	}
+	interval := 2 * time.Second
+	end := time.Now().Add(time.Duration(config.DurationSeconds) * time.Second)
 
-	time.Sleep(time.Duration(config.DurationSeconds) * time.Second)
+	for time.Now().Before(end) {
 
-	for _, container := range config.Containers {
-		_ = m.docker.StartContainer(container)
+		// stagger stop
+		for i, container := range config.Containers {
+			time.Sleep(time.Duration(i) * 300 * time.Millisecond)
+			_ = m.docker.StopContainer(container)
+		}
+
+		time.Sleep(interval)
+
+		// stagger start
+		for i, container := range config.Containers {
+			time.Sleep(time.Duration(i) * 300 * time.Millisecond)
+			_ = m.docker.StartContainer(container)
+		}
+
+		time.Sleep(interval)
 	}
 
 	return nil
 }
+
+// ---------------- NETWORK DELAY ----------------
 
 func (m *MockInjector) injectNetworkLatency(config FaultConfig) error {
 
-	delayMs := config.Intensity * 10
-	if delayMs <= 0 {
-		delayMs = 200
+	// ensure tc exists
+	for _, container := range config.Containers {
+		exec.Command(
+			"docker", "exec", container,
+			"sh", "-c",
+			"which tc || (apt update && apt install -y iproute2)",
+		).Run()
 	}
+
+	delayMs := int(math.Pow(float64(config.Intensity), 1.3)) * 10
+	if delayMs <= 0 {
+		delayMs = 500
+	}
+
+	jitter := delayMs / 2
+	loss := config.Intensity / 5
+	if loss > 25 {
+		loss = 25
+	}
+
+	// small delay before applying → propagation wave
+	time.Sleep(2 * time.Second)
 
 	for _, container := range config.Containers {
 
-		// Add delay
+		// clear existing
 		exec.Command(
 			"docker", "exec", container,
-			"tc", "qdisc", "add", "dev", "eth0",
-			"root", "netem", "delay",
-			strconv.Itoa(delayMs)+"ms",
+			"sh", "-c", "tc qdisc del dev eth0 root || true",
 		).Run()
+
+		err := exec.Command(
+			"docker", "exec", container,
+			"tc", "qdisc", "replace", "dev", "eth0",
+			"root", "netem",
+			"delay", fmt.Sprintf("%dms %dms", delayMs, jitter),
+			"loss", strconv.Itoa(loss)+"%",
+		).Run()
+
+		if err != nil {
+			fmt.Println("network delay error:", err)
+		}
 	}
 
 	time.Sleep(time.Duration(config.DurationSeconds) * time.Second)
 
-	// Remove delay
 	for _, container := range config.Containers {
 		exec.Command(
 			"docker", "exec", container,
-			"tc", "qdisc", "del", "dev", "eth0", "root",
+			"sh", "-c", "tc qdisc del dev eth0 root || true",
 		).Run()
 	}
 
 	return nil
 }
 
+// ---------------- PACKET LOSS ----------------
+
 func (m *MockInjector) injectPacketLoss(config FaultConfig) error {
 
-	lossPercent := config.Intensity
-	if lossPercent <= 0 {
-		lossPercent = 20
+	// ensure tc exists
+	for _, container := range config.Containers {
+		exec.Command(
+			"docker", "exec", container,
+			"sh", "-c",
+			"which tc || (apt update && apt install -y iproute2)",
+		).Run()
+	}
+
+	loss := config.Intensity
+	if loss <= 0 {
+		loss = 20
+	}
+	if loss > 50 {
+		loss = 50
+	}
+
+	delay := config.Intensity * 20
+	if delay == 0 {
+		delay = 200
 	}
 
 	for _, container := range config.Containers {
 
 		exec.Command(
 			"docker", "exec", container,
-			"tc", "qdisc", "add", "dev", "eth0",
-			"root", "netem", "loss",
-			strconv.Itoa(lossPercent)+"%",
+			"sh", "-c", "tc qdisc del dev eth0 root || true",
 		).Run()
+
+		err := exec.Command(
+			"docker", "exec", container,
+			"tc", "qdisc", "replace", "dev", "eth0",
+			"root", "netem",
+			"loss", strconv.Itoa(loss)+"%",
+			"delay", fmt.Sprintf("%dms %dms", delay, delay/2),
+		).Run()
+
+		if err != nil {
+			fmt.Println("packet loss error:", err)
+		}
 	}
 
 	time.Sleep(time.Duration(config.DurationSeconds) * time.Second)
@@ -154,9 +269,18 @@ func (m *MockInjector) injectPacketLoss(config FaultConfig) error {
 	for _, container := range config.Containers {
 		exec.Command(
 			"docker", "exec", container,
-			"tc", "qdisc", "del", "dev", "eth0", "root",
+			"sh", "-c", "tc qdisc del dev eth0 root || true",
 		).Run()
 	}
 
 	return nil
+}
+
+// ---------------- UTILS ----------------
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

@@ -51,6 +51,8 @@ type StartRequest struct {
 	StepIntensity   int                 `json:"stepIntensity"`
 	MaxIntensity    int                 `json:"maxIntensity"`
 	DependencyGraph map[string][]string `json:"dependencyGraph"`
+
+	ContainerEndpointMap map[string][]string `json:"containerEndpointMap"`
 }
 
 /*
@@ -81,6 +83,7 @@ func startHandler(w http.ResponseWriter, r *http.Request, orch *orchestrator.Orc
 		req.StepIntensity,
 		req.MaxIntensity,
 		req.DependencyGraph,
+		req.ContainerEndpointMap,
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)

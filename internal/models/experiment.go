@@ -4,6 +4,11 @@ import "time"
 
 type DependencyGraph map[string][]string
 
+type GraphMetadata struct {
+	TotalNodes int `json:"total_nodes"`
+	MaxDepth   int `json:"max_depth"`
+}
+
 type ExperimentState string
 
 const (
@@ -50,6 +55,9 @@ type Experiment struct {
 	Baseline        BaselineMetrics           `json:"baseline_metrics"`
 
 	DependencyGraph DependencyGraph `json:"dependency_graph"`
+
+	ContainerEndpointMap map[string][]string `json:"container_endpoint_map"`
+	GraphMetadata        GraphMetadata       `json:"graph_metadata"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

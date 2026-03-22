@@ -61,6 +61,7 @@ func (o *Orchestrator) StartExperiment(
 	stepIntensity int,
 	maxIntensity int,
 	deps models.DependencyGraph,
+	containerMap map[string][]string,
 ) (*models.Experiment, error) {
 
 	if duration <= 0 {
@@ -79,6 +80,8 @@ func (o *Orchestrator) StartExperiment(
 
 	id := uuid.New().String()
 
+	meta := computeGraphMeta(deps)
+
 	exp := &models.Experiment{
 		ID:                id,
 		ObservedEndpoints: observedEndpoints,
@@ -90,14 +93,16 @@ func (o *Orchestrator) StartExperiment(
 		CreatedAt:         time.Now(),
 		UpdatedAt:         time.Now(),
 
-		Adaptive:           adaptive,
-		StepIntensity:      stepIntensity,
-		MaxIntensity:       maxIntensity,
-		IntensityHistory:   []int{},
-		MaxStableIntensity: 0,
-		BreakingIntensity:  0,
-		TimelineHistory:    make(map[int]models.IntensityTimeline),
-		DependencyGraph:    deps,
+		Adaptive:             adaptive,
+		StepIntensity:        stepIntensity,
+		MaxIntensity:         maxIntensity,
+		IntensityHistory:     []int{},
+		MaxStableIntensity:   0,
+		BreakingIntensity:    0,
+		TimelineHistory:      make(map[int]models.IntensityTimeline),
+		DependencyGraph:      deps,
+		GraphMetadata:        meta,
+		ContainerEndpointMap: containerMap,
 	}
 
 	o.mu.Lock()
@@ -122,10 +127,12 @@ func (o *Orchestrator) StartExperiment(
 
 		switch event {
 
-		case monitoring.EventDown:
+		case monitoring.EventDegraded:
 			if _, exists := o.firstImpact[id][sample.Endpoint]; !exists {
 				o.firstImpact[id][sample.Endpoint] = time.Now()
 			}
+
+		case monitoring.EventDown:
 			if _, exists := o.downtime[id]; !exists {
 				o.downtime[id] = time.Now()
 				o.failures[id]++
@@ -171,6 +178,7 @@ func (o *Orchestrator) StartExperiment(
 
 	return exp, nil
 }
+
 func (o *Orchestrator) runTimeline(id string) {
 
 	o.setPhase(id, models.PhaseBaseline)
@@ -200,6 +208,13 @@ func (o *Orchestrator) runTimeline(id string) {
 
 		o.mu.Lock()
 
+		// RESET FIRST (fix for timeline overwrite issue)
+		o.firstImpact[id] = make(map[string]time.Time)
+		o.recoveryAt[id] = make(map[string]time.Time)
+		delete(o.downtime, id)
+
+		exp = o.experiments[id] // FIX: no shadowing
+
 		exp.CurrentIntensity = mid
 		exp.IntensityHistory = append(exp.IntensityHistory, mid)
 		exp.FaultStartedAt = startTime
@@ -207,11 +222,6 @@ func (o *Orchestrator) runTimeline(id string) {
 		if monitor, ok := o.monitors[id]; ok {
 			monitor.SetIntensity(mid)
 		}
-
-		// Reset round state
-		o.firstImpact[id] = make(map[string]time.Time)
-		o.recoveryAt[id] = make(map[string]time.Time)
-		delete(o.downtime, id)
 
 		o.mu.Unlock()
 
@@ -227,7 +237,7 @@ func (o *Orchestrator) runTimeline(id string) {
 
 		time.Sleep(10 * time.Second)
 
-		// Snapshot timeline safely
+		// snapshot timeline
 		o.mu.Lock()
 
 		firstImpactCopy := make(map[string]time.Time)
@@ -248,13 +258,33 @@ func (o *Orchestrator) runTimeline(id string) {
 
 		o.mu.Unlock()
 
-		if o.isExperimentDegraded(id, startTime) {
+		// ---- DECISION PHASE ----
+
+		degraded := o.isExperimentDegraded(id, startTime)
+		degradedMap := o.getDegradedEndpoints(id, startTime)
+
+		o.mu.Lock()
+		exp = o.experiments[id] // FIX: reuse reference
+		o.mu.Unlock()
+
+		blast, depth := o.computeGraphImpactScore(exp, degradedMap)
+
+		// strict local degradation
+		if degraded {
 			breaking = mid
 			high = mid - 1
-		} else {
-			maxStable = mid
-			low = mid + 1
+			continue
 		}
+
+		// graph-aware degradation
+		if blast > 50 || depth >= 2 {
+			breaking = mid
+			high = mid - 1
+			continue
+		}
+
+		maxStable = mid
+		low = mid + 1
 	}
 
 	o.mu.Lock()
@@ -326,8 +356,6 @@ func (o *Orchestrator) isExperimentDegraded(id string, since time.Time) bool {
 	endpoints := o.metrics[id]
 	o.mu.Unlock()
 
-	breachCount := 0
-
 	for _, samples := range endpoints {
 
 		var windowed []models.MetricSample
@@ -357,6 +385,10 @@ func (o *Orchestrator) isExperimentDegraded(id string, since time.Time) bool {
 			return latencies[i] < latencies[j]
 		})
 
+		if exp.Baseline.P95 == 0 {
+			continue
+		}
+
 		p95 := percentile(latencies, 95)
 		errorRate := float64(errorCount) / float64(len(windowed)) * 100
 
@@ -364,19 +396,12 @@ func (o *Orchestrator) isExperimentDegraded(id string, since time.Time) bool {
 		errorDelta := errorRate - exp.Baseline.ErrorRate
 
 		if latencyRatio > 1.5 || errorDelta > 5 {
-			breachCount++
-		} else {
-			breachCount = 0
-		}
-
-		if breachCount >= 3 {
 			return true
 		}
 	}
 
 	return false
 }
-
 func (o *Orchestrator) runStaticFault(id string) {
 
 	o.setPhase(id, models.PhaseInjecting)
@@ -437,7 +462,6 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 	endpointResults := make(map[string]interface{})
 
 	totalEndpoints := 0
-	degradedEndpoints := 0
 	globalRequests := 0
 
 	degradedMap := make(map[string]bool)
@@ -497,53 +521,50 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 		std := stddev(latencies, avgLatency)
 		jit := jitter(latencies)
 
-		errorRate := float64(errorCount) / float64(totalRequests) * 100
+		errorRate := safeDiv(float64(errorCount)*100, float64(totalRequests))
 
-		// ---- Baseline Safety ----
-		if exp.Baseline.P95 == 0 {
-			exp.Baseline.P95 = 1
+		// -------- DERIVED --------
+
+		latencyRatio := 1.0
+		if exp.Baseline.P95 > 0 {
+			latencyRatio = float64(p95) / float64(exp.Baseline.P95)
 		}
 
-		latencyRatio := float64(p95) / float64(exp.Baseline.P95)
 		errorDelta := errorRate - exp.Baseline.ErrorRate
 
-		degraded := latencyRatio > 1.5 || errorDelta > 5
+		stability := 100 - (errorRate + (latencyRatio-1)*50)
+		if stability < 0 {
+			stability = 0
+		}
+		if stability > 100 {
+			stability = 100
+		}
 
+		degraded := latencyRatio > 1.5 || errorDelta > 5
 		if degraded {
-			degradedEndpoints++
 			degradedMap[endpoint] = true
 		}
 
-		// ---- Timeline Selection ----
+		// -------- IMPACT ORDER --------
+
+		impactOrder := 0
 
 		selectedIntensity := exp.BreakingIntensity
 		if selectedIntensity == 0 {
 			selectedIntensity = exp.MaxStableIntensity
 		}
 
-		timelineData, ok := exp.TimelineHistory[selectedIntensity]
+		if timelineData, ok := exp.TimelineHistory[selectedIntensity]; ok {
 
-		var faultStart time.Time
-		var propagationDelay float64
-		var recoveryDelay float64
+			if t, exists := timelineData.FirstImpact[endpoint]; exists {
 
-		if ok {
-
-			faultStart = timelineData.FaultStartedAt
-
-			if impactTime, exists := timelineData.FirstImpact[endpoint]; exists {
-
-				if impactTime.After(faultStart) {
-					propagationDelay =
-						impactTime.Sub(faultStart).Seconds()
-				}
-
-				if recoveryTime, recExists := timelineData.RecoveryAt[endpoint]; recExists {
-					if recoveryTime.After(impactTime) {
-						recoveryDelay =
-							recoveryTime.Sub(impactTime).Seconds()
+				rank := 1
+				for ep, other := range timelineData.FirstImpact {
+					if ep != endpoint && other.Before(t) {
+						rank++
 					}
 				}
+				impactOrder = rank
 			}
 		}
 
@@ -562,55 +583,38 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 				"rate_percent":       errorRate,
 				"max_failure_streak": maxFailureStreak,
 			},
+			"derived": map[string]interface{}{
+				"latency_ratio": latencyRatio,
+				"error_delta":   errorDelta,
+			},
+			"stability_score": stability,
+			"impact_order":    impactOrder,
 			"container": map[string]interface{}{
-				"avg_cpu_percent": totalCPU / float64(totalRequests),
+				"avg_cpu_percent": safeDiv(totalCPU, float64(totalRequests)),
 				"max_cpu_percent": maxCPU,
-				"avg_memory_mb":   totalMem / float64(totalRequests),
+				"avg_memory_mb":   safeDiv(totalMem, float64(totalRequests)),
 				"max_memory_mb":   maxMem,
 			},
 			"degraded": degraded,
-			"timeline": map[string]interface{}{
-				"fault_started_at":      faultStart,
-				"propagation_delay_sec": propagationDelay,
-				"recovery_delay_sec":    recoveryDelay,
-			},
 		}
 	}
 
-	// ---- Blast Radius ----
+	blast, depth := o.computeGraphImpactScore(exp, degradedMap)
 
-	blastRadius := 0.0
-	if totalEndpoints > 0 {
-		blastRadius =
-			float64(degradedEndpoints) /
-				float64(totalEndpoints) * 100
-	}
-
-	// ---- Cascade Depth ----
-
-	cascadeDepth := o.computeCascadeDepth(exp, degradedMap)
-
-	// ---- System Severity ----
-
-	systemSeverity := "isolated"
-
-	if cascadeDepth >= 3 {
-		systemSeverity = "systemic"
-	} else if cascadeDepth == 2 {
-		systemSeverity = "propagated"
-	} else if blastRadius >= 50 {
-		systemSeverity = "major"
-	} else if blastRadius > 0 {
-		systemSeverity = "partial"
+	severity := "isolated"
+	if depth >= 3 {
+		severity = "systemic"
+	} else if depth == 2 {
+		severity = "propagated"
+	} else if blast > 0 {
+		severity = "partial"
 	}
 
 	result["endpoints"] = endpointResults
-	result["blast_radius_percent"] = blastRadius
-	result["cascade_depth"] = cascadeDepth
-	result["system_severity"] = systemSeverity
+	result["blast_radius_percent"] = blast
+	result["cascade_depth"] = depth
+	result["system_severity"] = severity
 	result["total_requests"] = globalRequests
-	result["experiment_state"] = exp.State
-	result["experiment_phase"] = exp.Phase
 
 	result["resilience_threshold"] = map[string]interface{}{
 		"max_stable_intensity": exp.MaxStableIntensity,
@@ -742,11 +746,42 @@ func (o *Orchestrator) computeBaseline(id string) {
 // Handling Dependency Graph
 func (o *Orchestrator) computeCascadeDepth(exp *models.Experiment, degraded map[string]bool) int {
 
+	maxDepth := 0
+
+	var dfs func(node string, depth int, visited map[string]bool)
+
+	dfs = func(node string, depth int, visited map[string]bool) {
+
+		if visited[node] {
+			return
+		}
+
+		visited[node] = true
+
+		if depth > maxDepth {
+			maxDepth = depth
+		}
+
+		for _, dep := range exp.DependencyGraph[node] {
+			if degraded[dep] {
+				dfs(dep, depth+1, visited)
+			}
+		}
+	}
+
+	for node := range degraded {
+		visited := make(map[string]bool)
+		dfs(node, 1, visited)
+	}
+
+	return maxDepth
+}
+
+func computeGraphMeta(graph models.DependencyGraph) models.GraphMetadata {
 	visited := make(map[string]bool)
 	maxDepth := 0
 
-	var dfs func(node string, depth int)
-
+	var dfs func(string, int)
 	dfs = func(node string, depth int) {
 		if visited[node] {
 			return
@@ -757,17 +792,117 @@ func (o *Orchestrator) computeCascadeDepth(exp *models.Experiment, degraded map[
 			maxDepth = depth
 		}
 
-		for _, dep := range exp.DependencyGraph[node] {
-			if degraded[dep] {
-				dfs(dep, depth+1)
-			}
-		}
-	}
-	for endpoint := range degraded {
-		if degraded[endpoint] {
-			dfs(endpoint, 1)
+		for _, n := range graph[node] {
+			dfs(n, depth+1)
 		}
 	}
 
-	return maxDepth
+	for node := range graph {
+		dfs(node, 1)
+	}
+
+	return models.GraphMetadata{
+		TotalNodes: len(visited),
+		MaxDepth:   maxDepth,
+	}
+}
+
+func getImpactedEndpoints(
+	containers []string,
+	containerMap map[string][]string,
+) []string {
+
+	seen := make(map[string]bool)
+	var result []string
+
+	for _, c := range containers {
+		for _, ep := range containerMap[c] {
+			if !seen[ep] {
+				seen[ep] = true
+				result = append(result, ep)
+			}
+		}
+	}
+
+	return result
+}
+
+func (o *Orchestrator) computeGraphImpactScore(
+	exp *models.Experiment,
+	degraded map[string]bool,
+) (float64, int) {
+
+	total := exp.GraphMetadata.TotalNodes
+	if total == 0 {
+		return 0, 0
+	}
+
+	affected := len(degraded)
+	blast := float64(affected) / float64(total) * 100
+	depth := o.computeCascadeDepth(exp, degraded)
+
+	return blast, depth
+}
+
+func safeDiv(a, b float64) float64 {
+	if b == 0 {
+		return 0
+	}
+	return a / b
+}
+
+func (o *Orchestrator) getDegradedEndpoints(id string, since time.Time) map[string]bool {
+
+	result := make(map[string]bool)
+
+	o.mu.Lock()
+	exp := o.experiments[id]
+	endpoints := o.metrics[id]
+	o.mu.Unlock()
+
+	for ep, samples := range endpoints {
+
+		var windowed []models.MetricSample
+
+		for _, s := range samples {
+			if s.Timestamp.After(since) &&
+				s.Intensity == exp.CurrentIntensity {
+				windowed = append(windowed, s)
+			}
+		}
+
+		if len(windowed) < 5 {
+			continue
+		}
+
+		var latencies []int64
+		var errorCount int
+
+		for _, s := range windowed {
+			latencies = append(latencies, s.LatencyMs)
+			if s.Status >= 400 || s.Status == 0 {
+				errorCount++
+			}
+		}
+
+		sort.Slice(latencies, func(i, j int) bool {
+			return latencies[i] < latencies[j]
+		})
+
+		if exp.Baseline.P95 == 0 {
+			continue
+		}
+
+		p95 := percentile(latencies, 95)
+		errorRate := float64(errorCount) / float64(len(windowed)) * 100
+
+		latencyRatio := float64(p95) / float64(exp.Baseline.P95)
+		errorDelta := errorRate - exp.Baseline.ErrorRate
+
+		if latencyRatio > 1.5 || errorDelta > 5 {
+			result[ep] = true
+		}
+	}
+
+	return result
 }
