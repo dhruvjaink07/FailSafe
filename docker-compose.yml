@@ -23,3 +23,15 @@ services:
       - "8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+
+  svc-a:
+    image: nginx
+    container_name: svc-a
+
+  svc-b:
+    image: nginx
+    container_name: svc-b
+
+  svc-c:
+    image: nginx
+    container_name: svc-c
