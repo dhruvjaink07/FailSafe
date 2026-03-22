@@ -4,13 +4,21 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/dhruvjaink07/failsafe/internal/orchestrator"
+	"github.com/dhruvjaink07/failsafe/internal/storage"
 )
 
 func main() {
 
-	orch := orchestrator.NewOrchestrator()
+	connStr := os.Getenv("DB_URL")
+
+	db, err := storage.NewPostgres(connStr)
+	if err != nil {
+		panic(err)
+	}
+	orch := orchestrator.NewOrchestrator(db)
 
 	http.HandleFunc("/health", healthHandler)
 	http.HandleFunc("/experiment/start", func(w http.ResponseWriter, r *http.Request) {
@@ -70,10 +78,15 @@ func startHandler(w http.ResponseWriter, r *http.Request, orch *orchestrator.Orc
 
 	var req StartRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Println("JSON decode error:", err)
 		http.Error(w, "invalid json", http.StatusBadRequest)
 		return
 	}
 
+	if req.FaultType == "" || len(req.ObservedEndpoints) == 0 {
+		http.Error(w, "invalid request payload", http.StatusBadRequest)
+		return
+	}
 	exp, err := orch.StartExperiment(
 		req.FaultType,
 		req.TargetContainers,
@@ -85,7 +98,10 @@ func startHandler(w http.ResponseWriter, r *http.Request, orch *orchestrator.Orc
 		req.DependencyGraph,
 		req.ContainerEndpointMap,
 	)
+
+	log.Printf("REQ: %+v\n", req)
 	if err != nil {
+		log.Println("StartExperiment error:", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}

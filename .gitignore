@@ -1,1 +1,37 @@
 failsafe-test/
+# Build outputs
+bin/
+*.exe
+*.out
+*.test
+
+# Go
+vendor/
+
+# Environment
+.env
+.env.*
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Docker
+*.tar
+
+# Temp
+tmp/
+temp/
+
+# Node (if frontend added later)
+node_modules/
+
+# Coverage
+coverage.out

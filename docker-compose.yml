@@ -1,0 +1,25 @@
+services:
+
+  postgres:
+    image: postgres:15
+    container_name: failsafe-postgres
+    environment:
+      POSTGRES_USER: failsafe
+      POSTGRES_PASSWORD: failsafe
+      POSTGRES_DB: failsafe
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./internal/storage/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+
+  backend:
+    build: .
+    container_name: failsafe-backend
+    depends_on:
+      - postgres
+    environment:
+      DB_URL: postgres://failsafe:failsafe@postgres:5432/failsafe
+    ports:
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

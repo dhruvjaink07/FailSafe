@@ -2,12 +2,14 @@ package orchestrator
 
 import (
 	"errors"
+	"fmt"
 	"sort"
 	"sync"
 	"time"
 
 	"github.com/dhruvjaink07/failsafe/internal/docker"
 	"github.com/dhruvjaink07/failsafe/internal/fault"
+	"github.com/dhruvjaink07/failsafe/internal/storage"
 
 	// "github.com/dhruvjaink07/failsafe/internal/fault"
 	"github.com/dhruvjaink07/failsafe/internal/models"
@@ -30,10 +32,12 @@ type Orchestrator struct {
 	firstImpact map[string]map[string]time.Time
 	recoveryAt  map[string]map[string]time.Time
 
-	mu sync.Mutex
+	db           *storage.Postgres
+	metricBuffer map[string][]models.MetricSample
+	mu           sync.Mutex
 }
 
-func NewOrchestrator() *Orchestrator {
+func NewOrchestrator(db *storage.Postgres) *Orchestrator {
 
 	dm := docker.NewManager()
 
@@ -48,7 +52,9 @@ func NewOrchestrator() *Orchestrator {
 		firstImpact:  make(map[string]map[string]time.Time),
 		recoveryAt:   make(map[string]map[string]time.Time),
 		docker:       dm,
-		injector:     fault.NewMockInjector(dm), // Replace with RustInjector later
+		injector:     fault.NewMockInjector(dm),
+		db:           db,
+		metricBuffer: make(map[string][]models.MetricSample),
 	}
 }
 
@@ -117,6 +123,12 @@ func (o *Orchestrator) StartExperiment(
 	o.recoveryAt[id] = make(map[string]time.Time)
 	o.mu.Unlock()
 
+	if o.db != nil {
+		err := o.db.InsertExperiment(exp)
+		if err != nil {
+			fmt.Println("DB insert failed:", err)
+		}
+	}
 	callback := func(event monitoring.EventType, sample models.MetricSample) {
 
 		o.mu.Lock()
@@ -124,7 +136,7 @@ func (o *Orchestrator) StartExperiment(
 
 		o.metrics[id][sample.Endpoint] =
 			append(o.metrics[id][sample.Endpoint], sample)
-
+		o.metricBuffer[id] = append(o.metricBuffer[id], sample)
 		switch event {
 
 		case monitoring.EventDegraded:
@@ -174,6 +186,8 @@ func (o *Orchestrator) StartExperiment(
 
 	monitor.Start(id, observedEndpoints)
 
+	o.startMetricsFlusher(id)
+
 	go o.runTimeline(id)
 
 	return exp, nil
@@ -188,7 +202,9 @@ func (o *Orchestrator) runTimeline(id string) {
 	o.mu.Lock()
 	exp := o.experiments[id]
 	o.mu.Unlock()
-
+	if o.db != nil {
+		_ = o.db.UpdateBaseline(exp)
+	}
 	if !exp.Adaptive {
 		o.runStaticFault(id)
 		return
@@ -301,15 +317,22 @@ func (o *Orchestrator) runTimeline(id string) {
 func (o *Orchestrator) setPhase(id string, phase models.ExperimentPhase) {
 
 	o.mu.Lock()
-	defer o.mu.Unlock()
 
 	exp, ok := o.experiments[id]
 	if !ok {
+		o.mu.Unlock()
 		return
 	}
 
 	exp.Phase = phase
 	exp.UpdatedAt = time.Now()
+
+	o.mu.Unlock()
+
+	// optional persistence (low cost)
+	if o.db != nil {
+		_ = o.db.UpdateExperimentResults(exp)
+	}
 }
 
 func (o *Orchestrator) StopExperiment(id string) error {
@@ -331,9 +354,41 @@ func (o *Orchestrator) StopExperiment(id string) error {
 }
 
 func (o *Orchestrator) completeExperiment(id string) {
+
 	o.mu.Lock()
-	defer o.mu.Unlock()
 	o.completeExperimentLocked(id)
+	exp := o.experiments[id]
+	o.mu.Unlock()
+
+	if o.db != nil {
+		err := o.db.UpdateExperimentResults(exp)
+		if err != nil {
+			fmt.Println("DB update failed:", err)
+		}
+	}
+
+	// -------- AGGREGATION --------
+
+	metrics, err := o.GetMetrics(id)
+	if err != nil {
+		fmt.Println("aggregation failed:", err)
+		return
+	}
+
+	data := metrics.(map[string]interface{})
+
+	if o.db != nil {
+
+		err = o.db.InsertAggregatedMetrics(id, data)
+		if err != nil {
+			fmt.Println("agg insert error:", err)
+		}
+
+		err = o.db.InsertExperimentSummary(id, data)
+		if err != nil {
+			fmt.Println("summary insert error:", err)
+		}
+	}
 }
 
 func (o *Orchestrator) completeExperimentLocked(id string) {
@@ -346,6 +401,7 @@ func (o *Orchestrator) completeExperimentLocked(id string) {
 	if monitor, ok := o.monitors[id]; ok {
 		monitor.Stop()
 		delete(o.monitors, id)
+		delete(o.metricBuffer, id)
 	}
 }
 
@@ -905,4 +961,33 @@ func (o *Orchestrator) getDegradedEndpoints(id string, since time.Time) map[stri
 	}
 
 	return result
+}
+
+func (o *Orchestrator) startMetricsFlusher(id string) {
+
+	ticker := time.NewTicker(2 * time.Second)
+
+	go func() {
+		for range ticker.C {
+
+			o.mu.Lock()
+
+			buffer := o.metricBuffer[id]
+			if len(buffer) == 0 {
+				o.mu.Unlock()
+				continue
+			}
+
+			o.metricBuffer[id] = nil
+
+			o.mu.Unlock()
+
+			if o.db != nil {
+				err := o.db.InsertMetricsBatch(buffer, id)
+				if err != nil {
+					fmt.Println("metrics batch insert error:", err)
+				}
+			}
+		}
+	}()
 }
