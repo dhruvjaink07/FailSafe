@@ -19,7 +19,7 @@ import (
 
 type Orchestrator struct {
 	experiments map[string]*models.Experiment
-	monitors    map[string]*monitoring.Monitor
+	monitors    map[string]monitoring.MonitorInterface
 	metrics     map[string]map[string][]models.MetricSample
 
 	downtime     map[string]time.Time
@@ -37,13 +37,13 @@ type Orchestrator struct {
 	mu           sync.Mutex
 }
 
-func NewOrchestrator(db *storage.Postgres) *Orchestrator {
+func NewOrchestrator(db *storage.Postgres, injector fault.Injector) *Orchestrator {
 
 	dm := docker.NewManager()
 
 	return &Orchestrator{
 		experiments:  make(map[string]*models.Experiment),
-		monitors:     make(map[string]*monitoring.Monitor),
+		monitors:     make(map[string]monitoring.MonitorInterface),
 		metrics:      make(map[string]map[string][]models.MetricSample),
 		downtime:     make(map[string]time.Time),
 		totalDown:    make(map[string]time.Duration),
@@ -52,7 +52,7 @@ func NewOrchestrator(db *storage.Postgres) *Orchestrator {
 		firstImpact:  make(map[string]map[string]time.Time),
 		recoveryAt:   make(map[string]map[string]time.Time),
 		docker:       dm,
-		injector:     fault.NewMockInjector(dm),
+		injector:     injector,
 		db:           db,
 		metricBuffer: make(map[string][]models.MetricSample),
 	}
@@ -60,27 +60,47 @@ func NewOrchestrator(db *storage.Postgres) *Orchestrator {
 
 func (o *Orchestrator) StartExperiment(
 	faultType string,
-	targetContainers []string,
+	targets []string,
+	targetType string,
 	observedEndpoints []string,
+	observationType string,
 	duration int,
 	adaptive bool,
 	stepIntensity int,
 	maxIntensity int,
 	deps models.DependencyGraph,
-	containerMap map[string][]string,
+	targetMap map[string][]string,
 ) (*models.Experiment, error) {
 
 	if duration <= 0 {
 		return nil, errors.New("duration must be greater than 0")
 	}
 
-	if len(targetContainers) == 0 || len(observedEndpoints) == 0 {
-		return nil, errors.New("targetContainers and observedEndpoints are required")
+	if len(targets) == 0 {
+		return nil, errors.New("targets are required")
 	}
 
-	for _, c := range targetContainers {
-		if err := o.docker.EnsureContainerReady(c, "", ""); err != nil {
-			return nil, err
+	if targetType == "" {
+		targetType = "docker"
+	}
+
+	if observationType == "" {
+		if targetType == "android" {
+			observationType = "android"
+		} else {
+			observationType = "http"
+		}
+	}
+
+	if observationType == "http" && len(observedEndpoints) == 0 {
+		return nil, errors.New("observedEndpoints are required for http observation")
+	}
+
+	if targetType == "docker" {
+		for _, t := range targets {
+			if err := o.docker.EnsureContainerReady(t, "", ""); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -91,7 +111,9 @@ func (o *Orchestrator) StartExperiment(
 	exp := &models.Experiment{
 		ID:                id,
 		ObservedEndpoints: observedEndpoints,
-		TargetContainers:  targetContainers,
+		Targets:           targets,
+		TargetType:        targetType,
+		ObservationType:   observationType,
 		FaultType:         faultType,
 		Duration:          duration,
 		State:             models.StateRunning,
@@ -99,16 +121,16 @@ func (o *Orchestrator) StartExperiment(
 		CreatedAt:         time.Now(),
 		UpdatedAt:         time.Now(),
 
-		Adaptive:             adaptive,
-		StepIntensity:        stepIntensity,
-		MaxIntensity:         maxIntensity,
-		IntensityHistory:     []int{},
-		MaxStableIntensity:   0,
-		BreakingIntensity:    0,
-		TimelineHistory:      make(map[int]models.IntensityTimeline),
-		DependencyGraph:      deps,
-		GraphMetadata:        meta,
-		ContainerEndpointMap: containerMap,
+		Adaptive:           adaptive,
+		StepIntensity:      stepIntensity,
+		MaxIntensity:       maxIntensity,
+		IntensityHistory:   []int{},
+		MaxStableIntensity: 0,
+		BreakingIntensity:  0,
+		TimelineHistory:    make(map[int]models.IntensityTimeline),
+		DependencyGraph:    deps,
+		GraphMetadata:      meta,
+		TargetEndpointMap:  targetMap,
 	}
 
 	o.mu.Lock()
@@ -178,7 +200,12 @@ func (o *Orchestrator) StartExperiment(
 		}
 	}
 
-	monitor := monitoring.NewMonitor(callback, o.docker, targetContainers)
+	var monitor monitoring.MonitorInterface
+	if observationType == "android" || targetType == "android" {
+		// monitor = monitoring.NewAndroidMonitor(callback, targets)
+	} else {
+		monitor = monitoring.NewMonitor(callback, o.docker, targets)
+	}
 
 	o.mu.Lock()
 	o.monitors[id] = monitor
@@ -243,7 +270,8 @@ func (o *Orchestrator) runTimeline(id string) {
 
 		config := fault.FaultConfig{
 			ExperimentID:    id,
-			Containers:      exp.TargetContainers,
+			Targets:         exp.Targets,
+			TargetType:      exp.TargetType,
 			Type:            fault.FaultType(exp.FaultType),
 			DurationSeconds: 5,
 			Intensity:       mid,
@@ -427,6 +455,15 @@ func (o *Orchestrator) isExperimentDegraded(id string, since time.Time) bool {
 			continue
 		}
 
+		if exp.ObservationType == "android" {
+			for _, s := range windowed {
+				if s.Crash || s.ANR || s.AppState == "background" || s.AppState == "not_running" {
+					return true
+				}
+			}
+			continue
+		}
+
 		var latencies []int64
 		var errorCount int
 
@@ -469,7 +506,8 @@ func (o *Orchestrator) runStaticFault(id string) {
 
 	config := fault.FaultConfig{
 		ExperimentID:    id,
-		Containers:      exp.TargetContainers,
+		Targets:         exp.Targets,
+		TargetType:      exp.TargetType,
 		Type:            fault.FaultType(exp.FaultType),
 		DurationSeconds: exp.Duration / 2,
 		Intensity:       exp.Intensity,
@@ -864,15 +902,15 @@ func computeGraphMeta(graph models.DependencyGraph) models.GraphMetadata {
 }
 
 func getImpactedEndpoints(
-	containers []string,
-	containerMap map[string][]string,
+	targets []string,
+	targetMap map[string][]string,
 ) []string {
 
 	seen := make(map[string]bool)
 	var result []string
 
-	for _, c := range containers {
-		for _, ep := range containerMap[c] {
+	for _, t := range targets {
+		for _, ep := range targetMap[t] {
 			if !seen[ep] {
 				seen[ep] = true
 				result = append(result, ep)
@@ -928,6 +966,16 @@ func (o *Orchestrator) getDegradedEndpoints(id string, since time.Time) map[stri
 		}
 
 		if len(windowed) < 5 {
+			continue
+		}
+
+		if exp.ObservationType == "android" {
+			for _, s := range windowed {
+				if s.Crash || s.ANR || s.AppState == "background" || s.AppState == "not_running" {
+					result[ep] = true
+					break
+				}
+			}
 			continue
 		}
 

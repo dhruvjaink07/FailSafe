@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/dhruvjaink07/failsafe/internal/docker"
+	"github.com/dhruvjaink07/failsafe/internal/fault"
 	"github.com/dhruvjaink07/failsafe/internal/orchestrator"
 	"github.com/dhruvjaink07/failsafe/internal/storage"
 )
@@ -18,7 +20,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	orch := orchestrator.NewOrchestrator(db)
+	dm := docker.NewManager()
+	injector := fault.NewDockerInjector(dm)
+	orch := orchestrator.NewOrchestrator(db, injector)
 
 	http.HandleFunc("/health", healthHandler)
 	http.HandleFunc("/experiment/start", func(w http.ResponseWriter, r *http.Request) {
@@ -51,8 +55,10 @@ Request Models
 
 type StartRequest struct {
 	FaultType         string   `json:"faultType"`
-	TargetContainers  []string `json:"targetContainers"`
+	Targets           []string `json:"targets"`
+	TargetType        string   `json:"targetType"`
 	ObservedEndpoints []string `json:"observedEndpoints"`
+	ObservationType   string   `json:"observationType"`
 	Duration          int      `json:"duration"`
 
 	Adaptive        bool                `json:"adaptive"`
@@ -60,7 +66,7 @@ type StartRequest struct {
 	MaxIntensity    int                 `json:"maxIntensity"`
 	DependencyGraph map[string][]string `json:"dependencyGraph"`
 
-	ContainerEndpointMap map[string][]string `json:"containerEndpointMap"`
+	TargetEndpointMap map[string][]string `json:"targetEndpointMap"`
 }
 
 /*
@@ -83,20 +89,22 @@ func startHandler(w http.ResponseWriter, r *http.Request, orch *orchestrator.Orc
 		return
 	}
 
-	if req.FaultType == "" || len(req.ObservedEndpoints) == 0 {
+	if req.FaultType == "" || len(req.Targets) == 0 {
 		http.Error(w, "invalid request payload", http.StatusBadRequest)
 		return
 	}
 	exp, err := orch.StartExperiment(
 		req.FaultType,
-		req.TargetContainers,
+		req.Targets,
+		req.TargetType,
 		req.ObservedEndpoints,
+		req.ObservationType,
 		req.Duration,
 		req.Adaptive,
 		req.StepIntensity,
 		req.MaxIntensity,
 		req.DependencyGraph,
-		req.ContainerEndpointMap,
+		req.TargetEndpointMap,
 	)
 
 	log.Printf("REQ: %+v\n", req)

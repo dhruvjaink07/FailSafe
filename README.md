@@ -27,3 +27,23 @@ docker exec -it failsafe-postgres psql -U failsafe -d failsafe
 ```
 docker-compose up --build
 ```
+
+### Android 
+Required commands (must exist)
+App control
+- ForceStop(pkg string)
+- Launch(pkg string, activity string)
+- ClearData(pkg string)
+System control
+- DisableWifi()
+- EnableWifi()
+- DisableData()
+- EnableData()
+Device state
+- Rotate(mode int)
+- SetBattery(level int)
+Reboot()
+Info extraction
+- GetTopActivity()
+- GetMemory(pkg string)
+- GetCPU(pkg string)

@@ -31,8 +31,12 @@ type Experiment struct {
 
 	// Observation target (entrypoint of system)
 	ObservedEndpoints []string `json:"observed_endpoints"`
-	// Injection targets (microservices / containers)
-	TargetContainers []string `json:"target_containers"`
+	// Injection targets (services, containers, devices)
+	Targets []string `json:"targets"`
+	// Target platform (docker | android)
+	TargetType string `json:"target_type"`
+	// Observation strategy (http | android)
+	ObservationType string `json:"observation_type"`
 
 	FaultType string `json:"fault_type"`
 	Duration  int    `json:"duration_seconds"`
@@ -56,8 +60,8 @@ type Experiment struct {
 
 	DependencyGraph DependencyGraph `json:"dependency_graph"`
 
-	ContainerEndpointMap map[string][]string `json:"container_endpoint_map"`
-	GraphMetadata        GraphMetadata       `json:"graph_metadata"`
+	TargetEndpointMap map[string][]string `json:"target_endpoint_map"`
+	GraphMetadata     GraphMetadata       `json:"graph_metadata"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

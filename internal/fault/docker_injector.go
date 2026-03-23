@@ -10,20 +10,20 @@ import (
 	"github.com/dhruvjaink07/failsafe/internal/docker"
 )
 
-type MockInjector struct {
+type DockerInjector struct {
 	docker *docker.Manager
 }
 
-func NewMockInjector(dm *docker.Manager) *MockInjector {
-	return &MockInjector{
+func NewDockerInjector(dm *docker.Manager) *DockerInjector {
+	return &DockerInjector{
 		docker: dm,
 	}
 }
 
-func (m *MockInjector) Inject(config FaultConfig) error {
+func (m *DockerInjector) Inject(config FaultConfig) error {
 
 	fmt.Printf("Injecting %s at intensity %d on %v\n",
-		config.Type, config.Intensity, config.Containers)
+		config.Type, config.Intensity, config.Targets)
 
 	go func() {
 		switch config.Type {
@@ -45,10 +45,10 @@ func (m *MockInjector) Inject(config FaultConfig) error {
 
 // ---------------- CPU ----------------
 
-func (m *MockInjector) injectCPUStress(config FaultConfig) error {
+func (m *DockerInjector) injectCPUStress(config FaultConfig) error {
 
 	// ensure stress exists
-	for _, container := range config.Containers {
+	for _, container := range config.Targets {
 		exec.Command(
 			"docker", "exec", container,
 			"sh", "-c",
@@ -56,7 +56,7 @@ func (m *MockInjector) injectCPUStress(config FaultConfig) error {
 		).Run()
 	}
 
-	for _, container := range config.Containers {
+	for _, container := range config.Targets {
 
 		cmd := exec.Command(
 			"docker", "exec", container,
@@ -79,7 +79,7 @@ func (m *MockInjector) injectCPUStress(config FaultConfig) error {
 
 // ---------------- MEMORY ----------------
 
-func (m *MockInjector) injectMemoryStress(config FaultConfig) error {
+func (m *DockerInjector) injectMemoryStress(config FaultConfig) error {
 
 	memMB := config.Intensity * 50
 	if memMB > 1024 {
@@ -90,7 +90,7 @@ func (m *MockInjector) injectMemoryStress(config FaultConfig) error {
 	}
 
 	// ensure stress exists
-	for _, container := range config.Containers {
+	for _, container := range config.Targets {
 		exec.Command(
 			"docker", "exec", container,
 			"sh", "-c",
@@ -98,7 +98,7 @@ func (m *MockInjector) injectMemoryStress(config FaultConfig) error {
 		).Run()
 	}
 
-	for _, container := range config.Containers {
+	for _, container := range config.Targets {
 
 		cmd := exec.Command(
 			"docker", "exec", container,
@@ -119,7 +119,7 @@ func (m *MockInjector) injectMemoryStress(config FaultConfig) error {
 	time.Sleep(time.Duration(config.DurationSeconds) * time.Second)
 
 	// cleanup
-	for _, container := range config.Containers {
+	for _, container := range config.Targets {
 		exec.Command(
 			"docker", "exec", container,
 			"pkill", "-f", "stress",
@@ -131,7 +131,7 @@ func (m *MockInjector) injectMemoryStress(config FaultConfig) error {
 
 // ---------------- KILL ----------------
 
-func (m *MockInjector) injectKill(config FaultConfig) error {
+func (m *DockerInjector) injectKill(config FaultConfig) error {
 
 	interval := 2 * time.Second
 	end := time.Now().Add(time.Duration(config.DurationSeconds) * time.Second)
@@ -139,7 +139,7 @@ func (m *MockInjector) injectKill(config FaultConfig) error {
 	for time.Now().Before(end) {
 
 		// stagger stop
-		for i, container := range config.Containers {
+		for i, container := range config.Targets {
 			time.Sleep(time.Duration(i) * 300 * time.Millisecond)
 			_ = m.docker.StopContainer(container)
 		}
@@ -147,7 +147,7 @@ func (m *MockInjector) injectKill(config FaultConfig) error {
 		time.Sleep(interval)
 
 		// stagger start
-		for i, container := range config.Containers {
+		for i, container := range config.Targets {
 			time.Sleep(time.Duration(i) * 300 * time.Millisecond)
 			_ = m.docker.StartContainer(container)
 		}
@@ -160,10 +160,10 @@ func (m *MockInjector) injectKill(config FaultConfig) error {
 
 // ---------------- NETWORK DELAY ----------------
 
-func (m *MockInjector) injectNetworkLatency(config FaultConfig) error {
+func (m *DockerInjector) injectNetworkLatency(config FaultConfig) error {
 
 	// ensure tc exists
-	for _, container := range config.Containers {
+	for _, container := range config.Targets {
 		exec.Command(
 			"docker", "exec", container,
 			"sh", "-c",
@@ -185,7 +185,7 @@ func (m *MockInjector) injectNetworkLatency(config FaultConfig) error {
 	// small delay before applying → propagation wave
 	time.Sleep(2 * time.Second)
 
-	for _, container := range config.Containers {
+	for _, container := range config.Targets {
 
 		// clear existing
 		exec.Command(
@@ -208,7 +208,7 @@ func (m *MockInjector) injectNetworkLatency(config FaultConfig) error {
 
 	time.Sleep(time.Duration(config.DurationSeconds) * time.Second)
 
-	for _, container := range config.Containers {
+	for _, container := range config.Targets {
 		exec.Command(
 			"docker", "exec", container,
 			"sh", "-c", "tc qdisc del dev eth0 root || true",
@@ -220,10 +220,10 @@ func (m *MockInjector) injectNetworkLatency(config FaultConfig) error {
 
 // ---------------- PACKET LOSS ----------------
 
-func (m *MockInjector) injectPacketLoss(config FaultConfig) error {
+func (m *DockerInjector) injectPacketLoss(config FaultConfig) error {
 
 	// ensure tc exists
-	for _, container := range config.Containers {
+	for _, container := range config.Targets {
 		exec.Command(
 			"docker", "exec", container,
 			"sh", "-c",
@@ -244,7 +244,7 @@ func (m *MockInjector) injectPacketLoss(config FaultConfig) error {
 		delay = 200
 	}
 
-	for _, container := range config.Containers {
+	for _, container := range config.Targets {
 
 		exec.Command(
 			"docker", "exec", container,
@@ -266,7 +266,7 @@ func (m *MockInjector) injectPacketLoss(config FaultConfig) error {
 
 	time.Sleep(time.Duration(config.DurationSeconds) * time.Second)
 
-	for _, container := range config.Containers {
+	for _, container := range config.Targets {
 		exec.Command(
 			"docker", "exec", container,
 			"sh", "-c", "tc qdisc del dev eth0 root || true",

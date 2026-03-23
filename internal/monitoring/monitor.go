@@ -19,6 +19,12 @@ const (
 
 type EventCallback func(event EventType, sample models.MetricSample)
 
+type MonitorInterface interface {
+	Start(experimentID string, endpoints []string)
+	Stop()
+	SetIntensity(i int)
+}
+
 type Monitor struct {
 	stopChan chan struct{}
 

@@ -19,4 +19,11 @@ type MetricSample struct {
 	ContainerMemPercent float64 `json:"container_memory_percent"`
 	ContainerNetIO      string  `json:"container_net_io"`
 	ContainerBlockIO    string  `json:"container_block_io"`
+
+	// Android-level metrics (optional)
+	AppState   string  `json:"app_state"`
+	ANR        bool    `json:"anr"`
+	Crash      bool    `json:"crash"`
+	FrameDrops int     `json:"frame_drops"`
+	MemoryMB   float64 `json:"memory_mb"`
 }

@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS experiments (
     max_stable_intensity INT,
     baseline JSONB,
     dependency_graph JSONB,
-    container_endpoint_map JSONB
+    target_endpoint_map JSONB
 );
 
 CREATE TABLE IF NOT EXISTS metrics_raw (
