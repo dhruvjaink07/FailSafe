@@ -28,7 +28,7 @@ type Orchestrator struct {
 	lastRecovery map[string]time.Duration
 
 	docker      *docker.Manager
-	injector    *fault.MockInjector
+	injector    fault.Injector
 	firstImpact map[string]map[string]time.Time
 	recoveryAt  map[string]map[string]time.Time
 
