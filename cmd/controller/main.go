@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/dhruvjaink07/failsafe/internal/models"
 	"github.com/dhruvjaink07/failsafe/internal/orchestrator"
 	"github.com/dhruvjaink07/failsafe/internal/storage"
 )
@@ -71,7 +72,8 @@ type StartRequest struct {
 	MaxIntensity    int                 `json:"maxIntensity"`
 	DependencyGraph map[string][]string `json:"dependencyGraph"`
 
-	TargetEndpointMap map[string][]string `json:"targetEndpointMap"`
+	TargetEndpointMap map[string][]string     `json:"targetEndpointMap"`
+	Scenario          []models.ScheduledFault `json:"scenario"`
 }
 
 /*
@@ -110,6 +112,7 @@ func startHandler(w http.ResponseWriter, r *http.Request, orch *orchestrator.Orc
 		req.MaxIntensity,
 		req.DependencyGraph,
 		req.TargetEndpointMap,
+		req.Scenario,
 	)
 
 	log.Printf("REQ: %+v\n", req)

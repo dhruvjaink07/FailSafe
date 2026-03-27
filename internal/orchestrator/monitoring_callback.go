@@ -46,15 +46,13 @@ func (o *Orchestrator) createCallback(id string) monitoring.EventCallback {
 				}
 			}
 		case monitoring.EventRecovered:
+			o.recoveryAt[id][sample.Endpoint] = now
 			if downAt, exists := o.downtime[id]; exists {
 				dur := now.Sub(downAt)
 				o.totalDown[id] += dur
 				o.lastRecovery[id] = dur
 				o.failures[id]++
 				delete(o.downtime, id)
-			}
-			if exp.Phase == models.PhaseRecovering || exp.Phase == models.PhaseInjecting {
-				o.recoveryAt[id][sample.Endpoint] = now
 			}
 		}
 	}

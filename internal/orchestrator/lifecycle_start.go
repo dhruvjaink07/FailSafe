@@ -22,6 +22,7 @@ func (o *Orchestrator) StartExperiment(
 	maxIntensity int,
 	deps models.DependencyGraph,
 	targetMap map[string][]string,
+	scheduledFaults []models.ScheduledFault,
 ) (*models.Experiment, error) {
 	if duration <= 0 {
 		return nil, errors.New("invalid duration")
@@ -41,6 +42,7 @@ func (o *Orchestrator) StartExperiment(
 	}
 
 	exp := o.createExperiment(id, targets, targetType, observationType, faultType, duration, adaptive, stepIntensity, maxIntensity, deps, targetMap)
+	exp.Scenario = scheduledFaults
 	o.registerExperiment(id, exp, observedEndpoints)
 
 	callback := o.createCallback(id)

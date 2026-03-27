@@ -21,9 +21,11 @@ type MetricSample struct {
 	ContainerBlockIO    string  `json:"container_block_io"`
 
 	// Android-level metrics (optional)
-	AppState   string  `json:"app_state"`
-	ANR        bool    `json:"anr"`
-	Crash      bool    `json:"crash"`
-	FrameDrops int     `json:"frame_drops"`
-	MemoryMB   float64 `json:"memory_mb"`
+	AppState    string  `json:"app_state"`
+	ANR         bool    `json:"anr"`
+	Crash       bool    `json:"crash"`
+	CrashReason string  `json:"crash_reason"`
+	CrashThread string  `json:"crash_thread"`
+	FrameDrops  int     `json:"frame_drops"`
+	MemoryMB    float64 `json:"memory_mb"`
 }

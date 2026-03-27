@@ -45,8 +45,9 @@ type Experiment struct {
 	// Observation strategy (http | android)
 	ObservationType string `json:"observation_type"`
 
-	FaultType string `json:"fault_type"`
-	Duration  int    `json:"duration_seconds"`
+	FaultType string           `json:"fault_type"`
+	Duration  int              `json:"duration_seconds"`
+	Scenario  []ScheduledFault `json:"scenario,omitempty"`
 
 	State ExperimentState `json:"state"`
 	Phase ExperimentPhase `json:"phase"`
@@ -72,6 +73,13 @@ type Experiment struct {
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type ScheduledFault struct {
+	Type            string `json:"type"`
+	At              int    `json:"at"`
+	DurationSeconds int    `json:"duration_seconds,omitempty"`
+	Intensity       int    `json:"intensity,omitempty"`
 }
 
 type IntensityTimeline struct {

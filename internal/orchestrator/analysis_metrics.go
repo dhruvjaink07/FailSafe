@@ -15,6 +15,10 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 		o.mu.Unlock()
 		return nil, errors.New("experiment not found")
 	}
+	if exp.ObservationType == "android" {
+		o.mu.Unlock()
+		return o.getAndroidMetrics(id), nil
+	}
 
 	endpointMap, exists := o.metrics[id]
 	if !exists {
@@ -178,6 +182,7 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 		"breaking_intensity":   exp.BreakingIntensity,
 		"intensity_steps":      exp.IntensityHistory,
 	}
+	result["timeline"] = o.buildTimelinePayload(id, exp.FaultStartedAt)
 
 	return result, nil
 }
@@ -245,7 +250,7 @@ func (o *Orchestrator) isExperimentDegraded(id string, since time.Time) bool {
 
 		if exp.ObservationType == "android" {
 			for _, s := range windowed {
-				if s.Crash || s.ANR || s.AppState == "background" || s.AppState == "not_running" {
+				if s.Crash || s.ANR || s.AppState == "not_running" {
 					return true
 				}
 			}
@@ -307,7 +312,7 @@ func (o *Orchestrator) getDegradedEndpoints(id string, since time.Time) map[stri
 
 		if exp.ObservationType == "android" {
 			for _, s := range windowed {
-				if s.Crash || s.ANR || s.AppState == "background" || s.AppState == "not_running" {
+				if s.Crash || s.ANR || s.AppState == "not_running" {
 					result[ep] = true
 					break
 				}

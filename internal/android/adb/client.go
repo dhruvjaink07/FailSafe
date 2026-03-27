@@ -131,6 +131,24 @@ func (c *Client) ClearData(pkg string) error {
 	return err
 }
 
+// Revoke runtime permission for the app.
+func (c *Client) RevokePermission(pkg, permission string) error {
+	_, err := c.Shell("pm revoke " + pkg + " " + permission)
+	return err
+}
+
+// Send app to background (home screen).
+func (c *Client) SendHome() error {
+	_, err := c.Shell("input keyevent KEYCODE_HOME")
+	return err
+}
+
+// Bring app to foreground using launcher intent.
+func (c *Client) BringToForeground(pkg string) error {
+	_, err := c.Shell("monkey -p " + pkg + " -c android.intent.category.LAUNCHER 1")
+	return err
+}
+
 //
 // ---------------- NETWORK CONTROL ----------------
 //

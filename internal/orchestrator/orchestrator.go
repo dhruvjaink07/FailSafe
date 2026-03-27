@@ -27,8 +27,9 @@ type Orchestrator struct {
 	injectors      map[string]fault.Injector
 	androidClients map[string]*adb.Client
 
-	firstImpact map[string]map[string]time.Time
-	recoveryAt  map[string]map[string]time.Time
+	firstImpact  map[string]map[string]time.Time
+	recoveryAt   map[string]map[string]time.Time
+	faultHistory map[string][]FaultEvent
 
 	db           *storage.Postgres
 	metricBuffer map[string][]models.MetricSample
@@ -57,6 +58,7 @@ func NewOrchestrator(
 		lastRecovery:   make(map[string]time.Duration),
 		firstImpact:    make(map[string]map[string]time.Time),
 		recoveryAt:     make(map[string]map[string]time.Time),
+		faultHistory:   make(map[string][]FaultEvent),
 		docker:         docker.NewManager(),
 		injectors:      make(map[string]fault.Injector),
 		androidClients: make(map[string]*adb.Client),

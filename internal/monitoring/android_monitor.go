@@ -10,15 +10,20 @@ import (
 
 // AndroidMonitor observes app/system behavior via ADB
 type AndroidMonitor struct {
-	adb      *adb.Client
-	pkg      string
-	callback func(EventType, models.MetricSample)
-	stop     chan struct{}
+	adb              *adb.Client
+	pkg              string
+	callback         func(EventType, models.MetricSample)
+	stop             chan struct{}
+	currentIntensity int
+	previousState    string
+	healthyStreak    int
+	unhealthyActive  bool
+	lastLogAt        time.Time
 }
 
 // SetIntensity implements [MonitorInterface].
 func (m *AndroidMonitor) SetIntensity(i int) {
-	panic("unimplemented")
+	m.currentIntensity = i
 }
 
 // Constructor
@@ -41,14 +46,54 @@ func NewAndroidMonitorWithCallback(
 
 // Checks if app crashed using logcat
 func (m *AndroidMonitor) HasCrash() bool {
+	events := m.readStructuredEvents()
+	for _, ev := range events {
+		if ev.Type == "crash" {
+			return true
+		}
+	}
+	return false
+}
 
-	out, err := m.adb.Logcat()
-	if err != nil {
-		return false
+func (m *AndroidMonitor) readStructuredEvents() []LogEvent {
+	now := time.Now()
+	if m.lastLogAt.IsZero() {
+		m.lastLogAt = now.Add(-10 * time.Second)
 	}
 
-	// Basic signal for crash
-	return strings.Contains(out, "FATAL EXCEPTION")
+	timeAnchor := m.lastLogAt.Format("2006-01-02 15:04:05.000")
+	raw := ""
+
+	if pid, ok := m.getAppPID(); ok {
+		out, err := m.adb.Shell("logcat -d --pid=" + pid + " -T \"" + timeAnchor + "\"")
+		if err == nil {
+			raw = out
+		}
+	}
+
+	if strings.TrimSpace(raw) == "" {
+		out, err := m.adb.Shell("logcat -d -T \"" + timeAnchor + "\" | grep " + m.pkg)
+		if err == nil {
+			raw = out
+		}
+	}
+
+	m.lastLogAt = now
+	return parseLogcatEvents(raw, now)
+}
+
+func (m *AndroidMonitor) getAppPID() (string, bool) {
+	out, err := m.adb.Shell("pidof " + m.pkg)
+	if err != nil {
+		return "", false
+	}
+
+	pids := strings.Fields(strings.TrimSpace(out))
+	if len(pids) == 0 {
+		return "", false
+	}
+
+	return pids[0], true
 }
 
 //
@@ -115,35 +160,90 @@ func (m *AndroidMonitor) CPU() string {
 func (m *AndroidMonitor) Start(id string, endpoints []string) {
 
 	go func() {
+		_, _ = m.adb.Shell("logcat -c")
+		m.lastLogAt = time.Now()
 
 		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
 
 		for {
 			select {
 
 			case <-ticker.C:
 
-				crash := m.HasCrash()
-				anr := m.HasANR()
+				events := m.readStructuredEvents()
+				crash := false
+				anr := false
+				crashReason := ""
+				crashThread := ""
+
+				for _, ev := range events {
+					if ev.Type == "crash" {
+						crash = true
+						if crashReason == "" {
+							crashReason = ev.Message
+							crashThread = ev.Thread
+						}
+					}
+					if ev.Type == "anr" {
+						anr = true
+					}
+				}
+
+				if !anr {
+					anr = m.HasANR()
+				}
 				running := m.IsAppRunning()
 
 				state := "running"
-				if !running {
+				if crash {
+					state = "crash"
+				} else if anr {
+					state = "anr"
+				} else if !running {
 					state = "not_running"
 				}
 
 				sample := models.MetricSample{
-					Endpoint:  m.pkg,
-					Timestamp: time.Now(),
-					Crash:     crash,
-					ANR:       anr,
-					AppState:  state,
+					Endpoint:    m.pkg,
+					Timestamp:   time.Now(),
+					Crash:       crash,
+					CrashReason: crashReason,
+					CrashThread: crashThread,
+					ANR:         anr,
+					AppState:    state,
+					Intensity:   m.currentIntensity,
 				}
 
-				event := EventRecovered
-				if crash || anr {
-					event = EventDown
+				event := EventType("sample")
+
+				if m.previousState != "" && m.previousState != state {
+					if state == "running" {
+						m.healthyStreak = 1
+					} else {
+						m.healthyStreak = 0
+						m.unhealthyActive = true
+						if state == "not_running" {
+							event = EventDegraded
+						} else {
+							event = EventDown
+						}
+					}
+				} else if state == "running" {
+					if m.unhealthyActive {
+						m.healthyStreak++
+						if m.healthyStreak >= 2 {
+							event = EventRecovered
+							m.unhealthyActive = false
+							m.healthyStreak = 0
+						}
+					}
+				} else {
+					m.healthyStreak = 0
+					m.unhealthyActive = true
 				}
+
+				m.previousState = state
 
 				m.callback(event, sample)
 
