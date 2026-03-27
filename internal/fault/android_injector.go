@@ -23,13 +23,6 @@ func NewAndroidInjector(adbCliet *adb.Client, pkg string) *AndroidInjector {
 // ---------------- FAULT TYPES ----------------
 //
 
-const (
-	FaultKillApp        FaultType = "kill_app"
-	FaultNetworkDisable FaultType = "network_disable"
-	FaultNetworkEnable  FaultType = "network_enable"
-	FaultClearData      FaultType = "clear_data"
-)
-
 //
 // ---------------- INJECTOR IMPLEMENTATION ----------------
 //

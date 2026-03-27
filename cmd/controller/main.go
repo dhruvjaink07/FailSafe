@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/dhruvjaink07/failsafe/internal/docker"
-	"github.com/dhruvjaink07/failsafe/internal/fault"
 	"github.com/dhruvjaink07/failsafe/internal/orchestrator"
 	"github.com/dhruvjaink07/failsafe/internal/storage"
 )
@@ -20,9 +18,16 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	dm := docker.NewManager()
-	injector := fault.NewDockerInjector(dm)
-	orch := orchestrator.NewOrchestrator(db, injector)
+	// dm := docker.NewManager()
+	// injector := fault.NewDockerInjector(dm)
+	orch := orchestrator.NewOrchestrator(
+		db,
+		os.Getenv("CONFIG_PARAM_1"),
+		os.Getenv("CONFIG_PARAM_2"),
+		os.Getenv("CONFIG_PARAM_3"),
+		os.Getenv("CONFIG_PARAM_4"),
+		os.Getenv("CONFIG_PARAM_5"),
+	)
 
 	http.HandleFunc("/health", healthHandler)
 	http.HandleFunc("/experiment/start", func(w http.ResponseWriter, r *http.Request) {

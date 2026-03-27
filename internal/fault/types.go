@@ -3,15 +3,17 @@ package fault
 type FaultType string
 
 const (
-	FaultCPU              FaultType = "cpu_stress"
-	FaultMemory           FaultType = "memory_stress"
-	FaultKill             FaultType = "kill"
-	FaultDelay            FaultType = "network_delay"
-	FaultPacketLoss       FaultType = "packet_loss"
-	FaultAppKill          FaultType = "app_kill"
-	FaultNetworkToggle    FaultType = "network_toggle"
-	FaultPermissionRevoke FaultType = "permission_revoke"
-	FaultRotation         FaultType = "rotation"
+	FaultCPU        FaultType = "cpu_stress"
+	FaultMemory     FaultType = "memory_stress"
+	FaultKill       FaultType = "kill"
+	FaultDelay      FaultType = "network_delay"
+	FaultPacketLoss FaultType = "packet_loss"
+
+	// android faults
+	FaultKillApp        FaultType = "kill_app"
+	FaultNetworkDisable FaultType = "network_disable"
+	FaultNetworkEnable  FaultType = "network_enable"
+	FaultClearData      FaultType = "clear_data"
 )
 
 type FaultConfig struct {

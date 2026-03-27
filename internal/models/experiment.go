@@ -2,6 +2,13 @@ package models
 
 import "time"
 
+type TargetType string
+
+const (
+	TargetDocker  TargetType = "docker"
+	TargetAndroid TargetType = "android"
+)
+
 type DependencyGraph map[string][]string
 
 type GraphMetadata struct {
