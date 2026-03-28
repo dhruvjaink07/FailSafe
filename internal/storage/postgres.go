@@ -138,19 +138,32 @@ func (p *Postgres) InsertAggregatedMetrics(
 	expID string,
 	data map[string]interface{},
 ) error {
+	endpointsRaw, ok := data["endpoints"]
+	if !ok || endpointsRaw == nil {
+		return nil
+	}
 
-	endpoints := data["endpoints"].(map[string]interface{})
+	endpoints, ok := endpointsRaw.(map[string]interface{})
+	if !ok {
+		return nil
+	}
 
 	batch := &pgx.Batch{}
 
 	for endpoint, raw := range endpoints {
+		ep, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
 
-		ep := raw.(map[string]interface{})
+		lat, _ := ep["latency"].(map[string]interface{})
+		errs, _ := ep["errors"].(map[string]interface{})
+		derived, _ := ep["derived"].(map[string]interface{})
+		container, _ := ep["container"].(map[string]interface{})
 
-		lat := ep["latency"].(map[string]interface{})
-		errs := ep["errors"].(map[string]interface{})
-		derived := ep["derived"].(map[string]interface{})
-		container := ep["container"].(map[string]interface{})
+		if lat == nil || errs == nil || derived == nil || container == nil {
+			continue
+		}
 
 		batch.Queue(`
 			INSERT INTO metrics_aggregated (
@@ -212,6 +225,18 @@ func (p *Postgres) InsertExperimentSummary(
 	expID string,
 	data map[string]interface{},
 ) error {
+	if _, ok := data["blast_radius_percent"]; !ok {
+		return nil
+	}
+	if _, ok := data["cascade_depth"]; !ok {
+		return nil
+	}
+	if _, ok := data["system_severity"]; !ok {
+		return nil
+	}
+	if _, ok := data["total_requests"]; !ok {
+		return nil
+	}
 
 	_, err := p.Pool.Exec(context.Background(), `
 		INSERT INTO experiment_summary (

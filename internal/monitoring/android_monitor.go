@@ -133,13 +133,7 @@ func (m *AndroidMonitor) Memory() string {
 
 // Check if app is in foreground
 func (m *AndroidMonitor) IsAppRunning() bool {
-
-	out, err := m.adb.Dumpsys("activity activities")
-	if err != nil {
-		return false
-	}
-
-	return strings.Contains(out, m.pkg)
+	return m.appLifecycleState() != "not_running"
 }
 
 //
@@ -174,8 +168,12 @@ func (m *AndroidMonitor) Start(id string, endpoints []string) {
 				events := m.readStructuredEvents()
 				crash := false
 				anr := false
+				hasWarning := false
 				crashReason := ""
 				crashThread := ""
+				crashClass := ""
+				crashSignature := ""
+				requestEvent := ""
 
 				for _, ev := range events {
 					if ev.Type == "crash" {
@@ -183,64 +181,67 @@ func (m *AndroidMonitor) Start(id string, endpoints []string) {
 						if crashReason == "" {
 							crashReason = ev.Message
 							crashThread = ev.Thread
+							crashClass, crashSignature = classifyCrash(ev.Message)
 						}
 					}
 					if ev.Type == "anr" {
 						anr = true
+					}
+					if ev.Type == "request" && requestEvent == "" {
+						requestEvent = ev.Message
+					}
+					if ev.Type == "warning" {
+						hasWarning = true
 					}
 				}
 
 				if !anr {
 					anr = m.HasANR()
 				}
-				running := m.IsAppRunning()
-
-				state := "running"
+				state := m.appLifecycleState()
 				if crash {
 					state = "crash"
 				} else if anr {
 					state = "anr"
-				} else if !running {
-					state = "not_running"
+				} else if hasWarning && state == "running" {
+					state = "degraded"
 				}
 
 				sample := models.MetricSample{
-					Endpoint:    m.pkg,
-					Timestamp:   time.Now(),
-					Crash:       crash,
-					CrashReason: crashReason,
-					CrashThread: crashThread,
-					ANR:         anr,
-					AppState:    state,
-					Intensity:   m.currentIntensity,
+					Endpoint:       m.pkg,
+					Timestamp:      time.Now(),
+					Crash:          crash,
+					CrashReason:    crashReason,
+					CrashThread:    crashThread,
+					CrashClass:     crashClass,
+					CrashSignature: crashSignature,
+					AppEvent:       requestEvent,
+					Warning:        hasWarning,
+					ANR:            anr,
+					AppState:       state,
+					Intensity:      m.currentIntensity,
 				}
 
 				event := EventType("sample")
 
-				if m.previousState != "" && m.previousState != state {
-					if state == "running" {
-						m.healthyStreak = 1
-					} else {
-						m.healthyStreak = 0
-						m.unhealthyActive = true
-						if state == "not_running" {
-							event = EventDegraded
-						} else {
-							event = EventDown
-						}
-					}
-				} else if state == "running" {
+				switch state {
+				case "not_running", "crash", "anr":
+					event = EventDown
+					m.unhealthyActive = true
+					m.healthyStreak = 0
+				case "background", "degraded":
+					event = EventDegraded
+					m.unhealthyActive = true
+					m.healthyStreak = 0
+				default:
 					if m.unhealthyActive {
 						m.healthyStreak++
-						if m.healthyStreak >= 2 {
+						if m.healthyStreak >= 1 {
 							event = EventRecovered
 							m.unhealthyActive = false
 							m.healthyStreak = 0
 						}
 					}
-				} else {
-					m.healthyStreak = 0
-					m.unhealthyActive = true
 				}
 
 				m.previousState = state
@@ -254,6 +255,61 @@ func (m *AndroidMonitor) Start(id string, endpoints []string) {
 	}()
 }
 
+func (m *AndroidMonitor) appLifecycleState() string {
+	if _, ok := m.getAppPID(); !ok {
+		return "not_running"
+	}
+
+	out, err := m.adb.Dumpsys("activity activities")
+	if err != nil {
+		return "running"
+	}
+
+	lower := strings.ToLower(out)
+	pkgLower := strings.ToLower(m.pkg)
+
+	resumedHints := []string{"mresumedactivity", "topresumedactivity", "resumedactivity"}
+	for _, hint := range resumedHints {
+		idx := strings.Index(lower, hint)
+		if idx == -1 {
+			continue
+		}
+		end := idx + 300
+		if end > len(lower) {
+			end = len(lower)
+		}
+		if strings.Contains(lower[idx:end], pkgLower) {
+			return "running"
+		}
+	}
+
+	if strings.Contains(lower, pkgLower) {
+		return "background"
+	}
+
+	return "not_running"
+}
+
 func (m *AndroidMonitor) Stop() {
 	close(m.stop)
+}
+
+func classifyCrash(message string) (string, string) {
+	lower := strings.ToLower(message)
+
+	switch {
+	case strings.Contains(lower, "nullpointerexception"):
+		return "ui_bug", "NullPointerException"
+	case strings.Contains(lower, "sockettimeoutexception"):
+		return "network_bug", "SocketTimeoutException"
+	case strings.Contains(lower, "timeoutexception"):
+		return "network_bug", "TimeoutException"
+	case strings.Contains(lower, "illegalstateexception"):
+		return "lifecycle_bug", "IllegalStateException"
+	default:
+		if strings.TrimSpace(message) == "" {
+			return "unknown", "unknown"
+		}
+		return "unknown", "unclassified"
+	}
 }

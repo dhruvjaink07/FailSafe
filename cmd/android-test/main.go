@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/dhruvjaink07/failsafe/internal/models"
 	"github.com/dhruvjaink07/failsafe/internal/orchestrator"
 	"github.com/dhruvjaink07/failsafe/internal/storage"
 )
@@ -31,6 +32,12 @@ func main() {
 	)
 
 	// ---- RUN EXPERIMENT ----
+	expectedRunning := true
+	scenario := []models.ScheduledFault{
+		{Type: "network_disable", At: 3, DurationSeconds: 6, Trigger: &models.FaultTrigger{Type: "request", Pattern: "/login", TimeoutSeconds: 10}},
+		{Type: "network_enable", At: 10, DurationSeconds: 1},
+	}
+
 	exp, err := o.StartExperiment(
 		"kill_app",    // faultType
 		[]string{pkg}, // targets
@@ -43,6 +50,8 @@ func main() {
 		5,
 		nil,
 		nil,
+		scenario,
+		models.ExpectedState{Running: &expectedRunning, NotCrash: true, NotANR: true},
 		nil,
 	)
 

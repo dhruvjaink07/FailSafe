@@ -1,0 +1,87 @@
+{
+    "blast_radius_percent": 0,
+    "cascade_depth": 0,
+    "crash_classification": {
+        "lifecycle_bug": 0,
+        "network_bug": 0,
+        "ui_bug": 0,
+        "unknown": 0
+    },
+    "health": {
+        "crash_reason": "Process became not_running during experiment",
+        "failure_type": "killed",
+        "severity": "high",
+        "status": "down",
+        "thread": ""
+    },
+    "recovery": {
+        "auto_recovered": false,
+        "manual_intervention_required": true,
+        "recovery_time_ms": -1,
+        "running": false
+    },
+    "replay_hints": [
+        {
+            "at_ms": 25183,
+            "at_time": "2026-03-28T21:55:00.9596127+05:30",
+            "fault": "network_disable",
+            "step": "inject_fault"
+        },
+        {
+            "at_ms": 25260,
+            "at_time": "2026-03-28T21:55:01.0367472+05:30",
+            "fault": "network_enable",
+            "step": "inject_fault"
+        },
+        {
+            "at_ms": 35046,
+            "at_time": "2026-03-28T21:55:10.8228593+05:30",
+            "fault": "kill_app",
+            "step": "inject_fault"
+        },
+        {
+            "at_ms": 36287,
+            "at_time": "2026-03-28T21:55:12.0633139+05:30",
+            "from": "running",
+            "step": "state_transition",
+            "to": "not_running"
+        }
+    ],
+    "resilience_threshold": {
+        "breaking_intensity": 0,
+        "intensity_steps": [],
+        "max_stable_intensity": 0
+    },
+    "stability": {
+        "anr_detected": false,
+        "background_samples": 0,
+        "crash_rate_percent": 0,
+        "unexpected_restarts": 0,
+        "uptime_percent": 90.9090909090909,
+        "warning_signals": 0
+    },
+    "state_transitions": [
+        {
+            "at": "2026-03-28T21:55:12.0633139+05:30",
+            "from": "running",
+            "to": "not_running"
+        }
+    ],
+    "target_type": "android",
+    "timeline": {
+        "fault_start": "2026-03-28T21:54:35.7759786+05:30",
+        "first_impact": {},
+        "recovery": {}
+    },
+    "validation": {
+        "configured": false,
+        "expected": {
+            "app_state": "",
+            "not_anr": false,
+            "not_crash": false,
+            "running": null
+        },
+        "passed": true,
+        "reasons": []
+    }
+}

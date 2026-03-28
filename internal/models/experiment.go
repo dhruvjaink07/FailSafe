@@ -48,6 +48,7 @@ type Experiment struct {
 	FaultType string           `json:"fault_type"`
 	Duration  int              `json:"duration_seconds"`
 	Scenario  []ScheduledFault `json:"scenario,omitempty"`
+	Expected  ExpectedState    `json:"expected,omitempty"`
 
 	State ExperimentState `json:"state"`
 	Phase ExperimentPhase `json:"phase"`
@@ -75,11 +76,25 @@ type Experiment struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+type FaultTrigger struct {
+	Type           string `json:"type,omitempty"`
+	Pattern        string `json:"pattern,omitempty"`
+	TimeoutSeconds int    `json:"timeout_seconds,omitempty"`
+}
+
+type ExpectedState struct {
+	AppState string `json:"app_state,omitempty"`
+	Running  *bool  `json:"running,omitempty"`
+	NotCrash bool   `json:"not_crash,omitempty"`
+	NotANR   bool   `json:"not_anr,omitempty"`
+}
+
 type ScheduledFault struct {
-	Type            string `json:"type"`
-	At              int    `json:"at"`
-	DurationSeconds int    `json:"duration_seconds,omitempty"`
-	Intensity       int    `json:"intensity,omitempty"`
+	Type            string        `json:"type"`
+	At              int           `json:"at"`
+	DurationSeconds int           `json:"duration_seconds,omitempty"`
+	Intensity       int           `json:"intensity,omitempty"`
+	Trigger         *FaultTrigger `json:"trigger,omitempty"`
 }
 
 type IntensityTimeline struct {

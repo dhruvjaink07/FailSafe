@@ -10,6 +10,11 @@ import (
 	"github.com/google/uuid"
 )
 
+type AndroidRunOptions struct {
+	AVDName  string
+	Headless bool
+}
+
 func (o *Orchestrator) StartExperiment(
 	faultType string,
 	targets []string,
@@ -23,6 +28,8 @@ func (o *Orchestrator) StartExperiment(
 	deps models.DependencyGraph,
 	targetMap map[string][]string,
 	scheduledFaults []models.ScheduledFault,
+	expected models.ExpectedState,
+	androidOptions *AndroidRunOptions,
 ) (*models.Experiment, error) {
 	if duration <= 0 {
 		return nil, errors.New("invalid duration")
@@ -32,7 +39,7 @@ func (o *Orchestrator) StartExperiment(
 
 	var adbClient *adb.Client
 	if targetType == "android" {
-		client, err := o.setupAndroid(id)
+		client, err := o.setupAndroid(id, androidOptions)
 		if err != nil {
 			return nil, err
 		}
@@ -43,6 +50,7 @@ func (o *Orchestrator) StartExperiment(
 
 	exp := o.createExperiment(id, targets, targetType, observationType, faultType, duration, adaptive, stepIntensity, maxIntensity, deps, targetMap)
 	exp.Scenario = scheduledFaults
+	exp.Expected = expected
 	o.registerExperiment(id, exp, observedEndpoints)
 
 	callback := o.createCallback(id)

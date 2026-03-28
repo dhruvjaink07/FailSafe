@@ -19,17 +19,14 @@ func NewManager(emulatorPath string) *Manager {
 // Start Emulator
 
 // launches an emulator as background process
-func (m *Manager) Start(avdName string) (*exec.Cmd, error) {
+func (m *Manager) Start(avdName string, headless bool) (*exec.Cmd, error) {
 
-	// Command:
-	// emulator -avd <name> -no-window -no-audio -no-boot-anim
-	cmd := exec.Command(
-		m.emulatoPath,
-		"-avd", avdName,
-		"-no-window",    // headles no UI
-		"-no-audio",     // reduce resource usage
-		"-no-boot-anim", // no boot animation
-	)
+	args := []string{"-avd", avdName, "-no-audio", "-no-boot-anim"}
+	if headless {
+		args = append(args, "-no-window")
+	}
+
+	cmd := exec.Command(m.emulatoPath, args...)
 
 	//  Start process (non-blocking)
 	err := cmd.Start()

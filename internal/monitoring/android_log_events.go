@@ -22,6 +22,8 @@ func parseLogcatEvents(raw string, now time.Time) []LogEvent {
 			continue
 		}
 
+		lower := strings.ToLower(line)
+
 		eventType := ""
 		thread := ""
 		msg := line
@@ -35,7 +37,9 @@ func parseLogcatEvents(raw string, now time.Time) []LogEvent {
 			}
 		case strings.Contains(line, "ANR in"):
 			eventType = "anr"
-		case strings.Contains(line, "TimeoutException"):
+		case strings.Contains(line, "OkHttp") || strings.Contains(line, "Retrofit") || strings.Contains(line, "Dio") || strings.Contains(line, " --> GET ") || strings.Contains(line, " --> POST ") || strings.Contains(line, "HTTP/"):
+			eventType = "request"
+		case strings.Contains(lower, "timeoutexception") || strings.Contains(lower, "unknownhostexception") || strings.Contains(lower, "connectexception") || strings.Contains(lower, "sslhandshakeexception") || strings.Contains(lower, "unable to resolve host") || strings.Contains(lower, "failed to connect") || strings.Contains(lower, "connection reset") || strings.Contains(lower, "http/1.1 5") || strings.Contains(lower, "http 5"):
 			eventType = "warning"
 		}
 
