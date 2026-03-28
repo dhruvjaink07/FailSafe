@@ -49,6 +49,9 @@ type Experiment struct {
 	Duration  int              `json:"duration_seconds"`
 	Scenario  []ScheduledFault `json:"scenario,omitempty"`
 	Expected  ExpectedState    `json:"expected,omitempty"`
+	APKPath   string           `json:"apk_path,omitempty"`
+	Package   string           `json:"package,omitempty"`
+	Activity  string           `json:"activity,omitempty"`
 
 	State ExperimentState `json:"state"`
 	Phase ExperimentPhase `json:"phase"`
@@ -83,10 +86,11 @@ type FaultTrigger struct {
 }
 
 type ExpectedState struct {
-	AppState string `json:"app_state,omitempty"`
-	Running  *bool  `json:"running,omitempty"`
-	NotCrash bool   `json:"not_crash,omitempty"`
-	NotANR   bool   `json:"not_anr,omitempty"`
+	AppState      string `json:"app_state,omitempty"`
+	Running       *bool  `json:"running,omitempty"`
+	NotCrash      bool   `json:"not_crash,omitempty"`
+	NotANR        bool   `json:"not_anr,omitempty"`
+	ShouldRecover *bool  `json:"should_recover,omitempty"`
 }
 
 type ScheduledFault struct {

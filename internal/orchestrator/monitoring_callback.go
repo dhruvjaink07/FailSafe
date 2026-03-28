@@ -29,6 +29,12 @@ func (o *Orchestrator) createCallback(id string) monitoring.EventCallback {
 			now = time.Now()
 		}
 
+		if sample.AppState == "not_running" || sample.Crash || sample.ANR {
+			if _, exists := o.firstImpact[id][sample.Endpoint]; !exists {
+				o.firstImpact[id][sample.Endpoint] = now
+			}
+		}
+
 		switch event {
 		case monitoring.EventDown:
 			if _, exists := o.downtime[id]; !exists {

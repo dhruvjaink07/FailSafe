@@ -56,3 +56,43 @@ CREATE TABLE IF NOT EXISTS experiment_summary (
     system_severity TEXT,
     total_requests INT
 );
+
+CREATE TABLE IF NOT EXISTS android_experiment_summary (
+    experiment_id UUID PRIMARY KEY,
+    target_package TEXT,
+    scenario TEXT,
+    failure_type TEXT,
+    health_status TEXT,
+    severity TEXT,
+    crash_reason TEXT,
+    recovered BOOLEAN,
+    auto_recovered BOOLEAN,
+    stable_recovered BOOLEAN,
+    manual_intervention_required BOOLEAN,
+    running BOOLEAN,
+    recovery_time_ms BIGINT,
+    first_impact_at TIMESTAMP,
+    recovered_at TIMESTAMP,
+    crash_rate_percent FLOAT,
+    uptime_percent FLOAT,
+    anr_detected BOOLEAN,
+    warning_signals INT,
+    unexpected_restarts INT,
+    validation_configured BOOLEAN,
+    validation_passed BOOLEAN,
+    validation_reasons JSONB,
+    summary_result TEXT,
+    summary_reason TEXT,
+    summary_suggestion TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS android_experiment_report (
+    experiment_id UUID PRIMARY KEY,
+    target_package TEXT,
+    scenario TEXT,
+    report JSONB NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);

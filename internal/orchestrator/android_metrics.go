@@ -29,6 +29,23 @@ func (o *Orchestrator) getAndroidMetrics(id string) map[string]interface{} {
 	})
 
 	total := len(flat)
+	primaryEndpoint := ""
+	if len(flat) > 0 && flat[0].Endpoint != "" {
+		primaryEndpoint = flat[0].Endpoint
+	}
+	if primaryEndpoint == "" && exp != nil && len(exp.Targets) > 0 {
+		primaryEndpoint = exp.Targets[0]
+	}
+	if primaryEndpoint == "" && exp != nil && exp.Package != "" {
+		primaryEndpoint = exp.Package
+	}
+	if primaryEndpoint == "" {
+		primaryEndpoint = o.pkg
+	}
+	if primaryEndpoint == "" {
+		primaryEndpoint = "android-target"
+	}
+
 	crashCount := 0
 	runningCount := 0
 	backgroundCount := 0
@@ -47,6 +64,7 @@ func (o *Orchestrator) getAndroidMetrics(id string) map[string]interface{} {
 	}
 	transitions := make([]androidTransition, 0)
 	previousState := ""
+	lastRunningTransitionAt := time.Time{}
 	unexpectedRestarts := 0
 
 	for _, s := range flat {
@@ -97,6 +115,9 @@ func (o *Orchestrator) getAndroidMetrics(id string) map[string]interface{} {
 
 		if previousState != "" && previousState != state {
 			transitions = append(transitions, androidTransition{from: previousState, to: state, at: s.Timestamp})
+			if state == "running" {
+				lastRunningTransitionAt = s.Timestamp
+			}
 			if previousState == "not_running" && state == "running" {
 				unexpectedRestarts++
 			}
@@ -105,22 +126,16 @@ func (o *Orchestrator) getAndroidMetrics(id string) map[string]interface{} {
 		previousState = state
 	}
 
+	if hadNotRunning || failureTypeFromState(flat) == "killed" {
+		// refined below once induced vs intrinsic kill cause is known
+	}
+
 	crashRate := 0.0
 	uptimePercent := 0.0
 	if total > 0 {
 		crashRate = float64(crashCount) / float64(total) * 100
 		uptimePercent = float64(runningCount) / float64(total) * 100
 	}
-
-	recoveryTimeMs := int64(-1)
-	o.mu.Lock()
-	for ep, start := range o.firstImpact[id] {
-		if rec, ok := o.recoveryAt[id][ep]; ok {
-			recoveryTimeMs = rec.Sub(start).Milliseconds()
-			break
-		}
-	}
-	o.mu.Unlock()
 
 	failureType := "healthy"
 	if crashRate > 0 || hadCrashState {
@@ -134,11 +149,74 @@ func (o *Orchestrator) getAndroidMetrics(id string) map[string]interface{} {
 	}
 
 	firstImpactCopy := make(map[string]time.Time)
+	recoveryCopy := make(map[string]time.Time)
 	o.mu.Lock()
 	for ep, ts := range o.firstImpact[id] {
 		firstImpactCopy[ep] = ts
 	}
+	for ep, ts := range o.recoveryAt[id] {
+		recoveryCopy[ep] = ts
+	}
 	o.mu.Unlock()
+
+	firstImpactAt, recoveryAt := findImpactAndRecoveryFromTransitions(transitions)
+
+	if len(firstImpactCopy) == 0 {
+		if !firstImpactAt.IsZero() {
+			firstImpactCopy[primaryEndpoint] = firstImpactAt
+		}
+	}
+	if firstImpactAt.IsZero() {
+		firstImpactAt = firstImpactCopy[primaryEndpoint]
+	}
+
+	if currentRecovery, ok := recoveryCopy[primaryEndpoint]; ok && !firstImpactAt.IsZero() && currentRecovery.Before(firstImpactAt) {
+		delete(recoveryCopy, primaryEndpoint)
+	}
+
+	if !recoveryAt.IsZero() {
+		if firstImpactAt.IsZero() || !recoveryAt.Before(firstImpactAt) {
+			recoveryCopy[primaryEndpoint] = recoveryAt
+		}
+	}
+
+	faultHistory := o.getFaultHistory(id)
+	scenarioLabel := deriveAndroidScenarioLabel(exp, faultHistory)
+
+	recovered, recoveryAtResolved := hasRecoveredAfterImpact(firstImpactAt, recoveryCopy)
+	stableRecovered, stableRecoveryAt := hasStableRecovery(flat, firstImpactAt, 8*time.Second)
+	if !recovered && stableRecovered {
+		recovered = true
+		recoveryAtResolved = stableRecoveryAt
+	}
+	if !recovered && previousState == "running" && !firstImpactAt.IsZero() {
+		recovered = true
+		if !lastRunningTransitionAt.IsZero() && !lastRunningTransitionAt.Before(firstImpactAt) {
+			recoveryAtResolved = lastRunningTransitionAt
+		} else if len(flat) > 0 && !flat[len(flat)-1].Timestamp.Before(firstImpactAt) {
+			recoveryAtResolved = flat[len(flat)-1].Timestamp
+		}
+	}
+	recoveryTimeMs := int64(-1)
+	if recovered && !firstImpactAt.IsZero() && !recoveryAtResolved.Before(firstImpactAt) {
+		recoveryTimeMs = recoveryAtResolved.Sub(firstImpactAt).Milliseconds()
+		recoveryCopy[primaryEndpoint] = recoveryAtResolved
+	}
+	if recoveryTimeMs < 0 {
+		recoveryTimeMs = -1
+	}
+
+	likelyCause := o.probableCause(id, firstImpactCopy)
+	inducedKill := failureType == "killed" && (likelyCause == "kill_app" || likelyCause == "kill_repeated")
+	if hadNotRunning {
+		if inducedKill {
+			crashClassCounts["induced_kill"] = 1
+		} else {
+			crashClassCounts["lifecycle_bug"]++
+		}
+	}
+
+	autoRecovered := recovered && !wasRecoveryExternallyTriggered(faultHistory, firstImpactAt, recoveryAtResolved)
 
 	if crashReason == "" && failureType != "healthy" {
 		cause := o.probableCause(id, firstImpactCopy)
@@ -167,23 +245,30 @@ func (o *Orchestrator) getAndroidMetrics(id string) map[string]interface{} {
 	severity := "low"
 	if crashRate > 50 {
 		severity = "critical"
-	} else if crashRate > 0 || anr {
+	} else if failureType == "healthy" {
+		if warningCount > 0 {
+			severity = "medium"
+		}
+	} else if !recovered {
+		severity = "critical"
+	} else if failureType == "killed" || failureType == "crash" || failureType == "anr" {
 		severity = "high"
-	} else if hadNotRunning {
-		severity = "high"
-	} else if warningCount > 0 {
+	} else {
 		severity = "medium"
 	}
 
 	status := "healthy"
 	if failureType == "crash" || failureType == "anr" || failureType == "killed" {
-		status = "down"
+		if recovered {
+			status = "degraded"
+		} else {
+			status = "down"
+		}
 	} else if hadIncident {
 		status = "degraded"
 	}
 
-	autoRecovered := recoveryTimeMs >= 0
-	manualIntervention := status == "down" && !autoRecovered
+	manualIntervention := !autoRecovered && failureType != "healthy"
 
 	stateTransitions := make([]map[string]interface{}, 0, len(transitions))
 	for _, tr := range transitions {
@@ -215,9 +300,10 @@ func (o *Orchestrator) getAndroidMetrics(id string) map[string]interface{} {
 	}
 
 	runningNow := previousState == "running"
+
 	validation := map[string]interface{}{
 		"configured": false,
-		"passed":     true,
+		"passed":     nil,
 		"reasons":    []string{},
 		"expected":   map[string]interface{}{},
 	}
@@ -225,7 +311,7 @@ func (o *Orchestrator) getAndroidMetrics(id string) map[string]interface{} {
 	if exp != nil {
 		expected := exp.Expected
 		reasons := make([]string, 0)
-		configured := expected.AppState != "" || expected.Running != nil || expected.NotCrash || expected.NotANR
+		configured := expected.AppState != "" || expected.Running != nil || expected.NotCrash || expected.NotANR || expected.ShouldRecover != nil
 
 		if expected.Running != nil && *expected.Running != runningNow {
 			reasons = append(reasons, "running state does not match expectation")
@@ -239,17 +325,68 @@ func (o *Orchestrator) getAndroidMetrics(id string) map[string]interface{} {
 		if expected.NotANR && anr {
 			reasons = append(reasons, "anr detected but expected not_anr=true")
 		}
+		if expected.ShouldRecover != nil && *expected.ShouldRecover {
+			if !recovered {
+				reasons = append(reasons, "expected recovery but app did not recover")
+			} else if !autoRecovered {
+				reasons = append(reasons, "app recovered but required external interaction")
+			}
+		}
+		if expected.NotCrash && failureType == "killed" && !recovered {
+			reasons = append(reasons, "process kill detected and app did not recover")
+		}
+
+		passed := interface{}(nil)
+		if configured {
+			passed = len(reasons) == 0
+		}
 
 		validation = map[string]interface{}{
 			"configured": configured,
-			"passed":     len(reasons) == 0,
+			"passed":     passed,
 			"reasons":    reasons,
 			"expected": map[string]interface{}{
-				"app_state": expected.AppState,
-				"running":   expected.Running,
-				"not_crash": expected.NotCrash,
-				"not_anr":   expected.NotANR,
+				"app_state":      expected.AppState,
+				"running":        expected.Running,
+				"not_crash":      expected.NotCrash,
+				"not_anr":        expected.NotANR,
+				"should_recover": expected.ShouldRecover,
 			},
+		}
+	}
+
+	summaryResult := "UNKNOWN"
+	summaryReason := "No expectation configured; results are observational"
+	summarySuggestion := "Set expected.should_recover and expected.not_crash to enforce pass/fail assertions"
+
+	if vConfigured, _ := validation["configured"].(bool); vConfigured {
+		if vPassed, ok := validation["passed"].(bool); ok {
+			if vPassed {
+				summaryResult = "PASS"
+				summaryReason = "Observed behavior matched configured expectations"
+				summarySuggestion = "Increase stress with network_flaky + kill_repeated to probe deeper resilience"
+			} else {
+				summaryResult = "FAIL"
+				summaryReason = failureReason(failureType, recovered, autoRecovered)
+				summarySuggestion = failureSuggestion(failureType, autoRecovered)
+			}
+		}
+	} else if failureType != "healthy" {
+		summaryResult = "FAIL"
+		summaryReason = failureReason(failureType, recovered, autoRecovered)
+		summarySuggestion = failureSuggestion(failureType, autoRecovered)
+	}
+
+	if likelyCause != "" && summaryResult == "FAIL" {
+		summaryReason = summaryReason + " (likely cause: " + likelyCause + ")"
+	}
+
+	if recovered && recoveryTimeMs >= 10000 {
+		if severity == "medium" {
+			severity = "high"
+		}
+		if recoveryTimeMs >= 30000 {
+			severity = "critical"
 		}
 	}
 
@@ -257,6 +394,7 @@ func (o *Orchestrator) getAndroidMetrics(id string) map[string]interface{} {
 
 	return map[string]interface{}{
 		"target_type": "android",
+		"scenario":    scenarioLabel,
 		"health": map[string]interface{}{
 			"status":       status,
 			"failure_type": failureType,
@@ -274,19 +412,210 @@ func (o *Orchestrator) getAndroidMetrics(id string) map[string]interface{} {
 		},
 		"recovery": map[string]interface{}{
 			"auto_recovered":               autoRecovered,
+			"recovered":                    recovered,
+			"stable_recovered":             stableRecovered,
 			"recovery_time_ms":             recoveryTimeMs,
 			"manual_intervention_required": manualIntervention,
 			"running":                      runningNow,
 		},
 		"crash_classification": crashClassCounts,
 		"validation":           validation,
-		"replay_hints":         replayHints,
-		"state_transitions":    stateTransitions,
-		"timeline":             o.buildTimelinePayload(id, faultStart),
+		"summary": map[string]interface{}{
+			"result":     summaryResult,
+			"reason":     summaryReason,
+			"suggestion": summarySuggestion,
+		},
+		"replay_hints":      replayHints,
+		"state_transitions": stateTransitions,
+		"timeline": map[string]interface{}{
+			"fault_start":  faultStart,
+			"first_impact": firstImpactCopy,
+			"recovery":     recoveryCopy,
+		},
 		"resilience_threshold": resilience,
 		"blast_radius_percent": 0,
 		"cascade_depth":        0,
 	}
+}
+
+func hasStableRecovery(samples []models.MetricSample, since time.Time, window time.Duration) (bool, time.Time) {
+	if window <= 0 {
+		window = 8 * time.Second
+	}
+
+	stableStart := time.Time{}
+	seenFailure := since.IsZero()
+	for _, s := range samples {
+		if !since.IsZero() && s.Timestamp.Before(since) {
+			continue
+		}
+		state := classifyAndroidState(s)
+		if !seenFailure {
+			if state == "not_running" || state == "crash" || state == "anr" || state == "degraded" {
+				seenFailure = true
+			}
+			continue
+		}
+
+		if state == "running" && !s.Crash && !s.ANR {
+			if stableStart.IsZero() {
+				stableStart = s.Timestamp
+			}
+			if s.Timestamp.Sub(stableStart) >= window {
+				return true, s.Timestamp
+			}
+			continue
+		}
+		stableStart = time.Time{}
+	}
+
+	return false, time.Time{}
+}
+
+func deriveAndroidScenarioLabel(exp *models.Experiment, history []FaultEvent) string {
+	faults := make(map[string]bool)
+	for _, ev := range history {
+		faults[ev.Type] = true
+	}
+
+	if faults["kill_app"] && faults["foreground_app"] {
+		return "process_kill_recovery"
+	}
+	if (faults["network_disable"] || faults["network_flaky"]) && faults["network_enable"] {
+		return "network_interruption_recovery"
+	}
+	if faults["background_app"] && faults["foreground_app"] {
+		return "lifecycle_background_foreground"
+	}
+	if faults["revoke_camera"] || faults["revoke_storage"] || faults["revoke_location"] {
+		return "permission_resilience"
+	}
+
+	if exp != nil && len(exp.Scenario) > 0 {
+		return "custom_scenario"
+	}
+
+	return "single_fault"
+}
+
+func hasRecoveredAfterImpact(firstImpactAt time.Time, recovery map[string]time.Time) (bool, time.Time) {
+	best := time.Time{}
+	for _, ts := range recovery {
+		if ts.IsZero() {
+			continue
+		}
+		if !firstImpactAt.IsZero() && ts.Before(firstImpactAt) {
+			continue
+		}
+		if best.IsZero() || ts.Before(best) {
+			best = ts
+		}
+	}
+
+	if best.IsZero() {
+		return false, time.Time{}
+	}
+	return true, best
+}
+
+func findImpactAndRecoveryFromTransitions(transitions []androidTransition) (time.Time, time.Time) {
+	impact := time.Time{}
+	recovery := time.Time{}
+
+	for _, tr := range transitions {
+		if impact.IsZero() && (tr.to == "not_running" || tr.to == "crash" || tr.to == "anr" || tr.to == "degraded") {
+			impact = tr.at
+			continue
+		}
+
+		if !impact.IsZero() && tr.from != "running" && tr.to == "running" && !tr.at.Before(impact) {
+			recovery = tr.at
+			break
+		}
+	}
+
+	return impact, recovery
+}
+
+func wasRecoveryExternallyTriggered(history []FaultEvent, impactAt, recoveryAt time.Time) bool {
+	if impactAt.IsZero() || recoveryAt.IsZero() {
+		return false
+	}
+
+	for _, ev := range history {
+		if ev.Type != "foreground_app" {
+			continue
+		}
+		if ev.Timestamp.Before(impactAt) {
+			continue
+		}
+		if ev.Timestamp.After(recoveryAt.Add(2 * time.Second)) {
+			continue
+		}
+		return true
+	}
+
+	return false
+}
+
+func failureReason(failureType string, recovered bool, autoRecovered bool) string {
+	switch failureType {
+	case "killed":
+		if !recovered {
+			return "App did not recover after process kill"
+		}
+		if !autoRecovered {
+			return "App recovered only after external trigger"
+		}
+		return "App process was killed and later recovered"
+	case "crash":
+		if !recovered {
+			return "App crashed and did not recover stably"
+		}
+		if !autoRecovered {
+			return "App recovered only after external trigger"
+		}
+		return "App crashed but recovered"
+	case "anr":
+		if !recovered {
+			return "App became unresponsive (ANR) and did not recover"
+		}
+		if !autoRecovered {
+			return "App recovered from ANR only after external trigger"
+		}
+		return "App hit ANR but recovered"
+	default:
+		return "No hard failure detected"
+	}
+}
+
+func failureSuggestion(failureType string, autoRecovered bool) string {
+	switch failureType {
+	case "killed":
+		if !autoRecovered {
+			return "Handle process death and restore app state on launch"
+		}
+		return "Improve warm-start rehydration to reduce restart impact"
+	case "crash":
+		return "Capture crash stack traces and harden lifecycle/state restoration paths"
+	case "anr":
+		return "Move heavy work off main thread and add timeout guards for blocking operations"
+	default:
+		if !autoRecovered {
+			return "Add retry logic and defensive recovery hooks for transient failures"
+		}
+		return "Increase stress scenarios to validate deeper resilience behavior"
+	}
+}
+
+func failureTypeFromState(samples []models.MetricSample) string {
+	for _, s := range samples {
+		state := classifyAndroidState(s)
+		if state == "not_running" {
+			return "killed"
+		}
+	}
+	return "healthy"
 }
 
 func classifyAndroidState(s models.MetricSample) string {

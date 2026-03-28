@@ -1,4 +1,5 @@
 failsafe-test/
+uploads/
 # Build outputs
 bin/
 *.exe
@@ -14,6 +15,7 @@ vendor/
 
 # Logs
 *.log
+*resp.json
 
 # OS files
 .DS_Store

@@ -40,6 +40,10 @@ type Orchestrator struct {
 	pkg          string
 	activity     string
 
+	emulatorRunning  bool
+	emulatorDeviceID string
+	emulatorAVDName  string
+
 	mu sync.Mutex
 }
 
@@ -70,5 +74,9 @@ func NewOrchestrator(
 		apkPath:      apkPath,
 		pkg:          pkg,
 		activity:     activity,
+
+		emulatorRunning:  false,
+		emulatorDeviceID: "emulator-5554",
+		emulatorAVDName:  "Pixel_8a",
 	}
 }

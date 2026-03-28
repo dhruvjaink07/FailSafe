@@ -104,7 +104,12 @@ func (o *Orchestrator) completeExperiment(id string) {
 		if metrics, err := o.GetMetrics(id); err == nil {
 			if data, ok := metrics.(map[string]interface{}); ok {
 				_ = o.db.InsertAggregatedMetrics(id, data)
-				_ = o.db.InsertExperimentSummary(id, data)
+				if exp.TargetType == "android" || exp.ObservationType == "android" {
+					_ = o.db.InsertAndroidExperimentReport(id, data)
+					_ = o.db.InsertAndroidExperimentSummary(id, data)
+				} else {
+					_ = o.db.InsertExperimentSummary(id, data)
+				}
 			}
 		}
 	}

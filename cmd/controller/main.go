@@ -3,15 +3,36 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/dhruvjaink07/failsafe/internal/models"
 	"github.com/dhruvjaink07/failsafe/internal/orchestrator"
 	"github.com/dhruvjaink07/failsafe/internal/storage"
+	"github.com/google/uuid"
+)
+
+type uploadedAPK struct {
+	ID           string    `json:"id"`
+	Path         string    `json:"path"`
+	Package      string    `json:"package"`
+	Activity     string    `json:"activity"`
+	OriginalName string    `json:"original_name"`
+	UploadedAt   time.Time `json:"uploaded_at"`
+}
+
+var (
+	uploadedAPKMu sync.RWMutex
+	uploadedAPKs  = map[string]uploadedAPK{}
 )
 
 func main() {
@@ -56,6 +77,7 @@ func main() {
 	http.HandleFunc("/experiment/android/status", func(w http.ResponseWriter, r *http.Request) {
 		androidStatusHandler(w, r, orch)
 	})
+	http.HandleFunc("/upload/apk", uploadAPKHandler)
 	http.HandleFunc("/scenarios/presets", func(w http.ResponseWriter, r *http.Request) {
 		presetsHandler(w, r)
 	})
@@ -151,11 +173,13 @@ type StartRequest struct {
 	ScenarioPreset    string
 	Expected          models.ExpectedState
 	AndroidRun        *AndroidRunRequest
+	APK               string
 }
 
 type AndroidRunRequest struct {
-	AVDName  string
-	Headless *bool
+	AVDName       string
+	Headless      *bool
+	ResetAppState *bool
 }
 
 func (a *AndroidRunRequest) toOptions() *orchestrator.AndroidRunOptions {
@@ -167,8 +191,9 @@ func (a *AndroidRunRequest) toOptions() *orchestrator.AndroidRunOptions {
 		headless = *a.Headless
 	}
 	return &orchestrator.AndroidRunOptions{
-		AVDName:  strings.TrimSpace(a.AVDName),
-		Headless: headless,
+		AVDName:       strings.TrimSpace(a.AVDName),
+		Headless:      headless,
+		ResetAppState: a.ResetAppState != nil && *a.ResetAppState,
 	}
 }
 
@@ -178,6 +203,8 @@ func (s *StartRequest) UnmarshalJSON(data []byte) error {
 		AVDNameSnake string `json:"avd_name"`
 		Headless     *bool  `json:"headless"`
 		Background   *bool  `json:"background"`
+		ResetApp     *bool  `json:"resetAppState"`
+		ResetAppSnk  *bool  `json:"reset_app_state"`
 	}
 
 	type Alias struct {
@@ -208,6 +235,10 @@ func (s *StartRequest) UnmarshalJSON(data []byte) error {
 		Expected          models.ExpectedState    `json:"expected"`
 		AndroidRun        *androidRunAlias        `json:"androidRun"`
 		AndroidRunSnake   *androidRunAlias        `json:"android_run"`
+		APK               string                  `json:"apk"`
+		APKSnake          string                  `json:"apk_id"`
+		UploadedAPKID     string                  `json:"uploadedApkId"`
+		UploadedAPKSnake  string                  `json:"uploaded_apk_id"`
 	}
 
 	var a Alias
@@ -259,6 +290,7 @@ func (s *StartRequest) UnmarshalJSON(data []byte) error {
 	}
 	s.ScenarioPreset = firstNonEmpty(a.ScenarioPreset, a.ScenarioPresetSnk)
 	s.Expected = a.Expected
+	s.APK = firstNonEmpty(a.APK, a.APKSnake, a.UploadedAPKID, a.UploadedAPKSnake)
 
 	runCfg := a.AndroidRun
 	if runCfg == nil {
@@ -270,8 +302,9 @@ func (s *StartRequest) UnmarshalJSON(data []byte) error {
 			headless = runCfg.Background
 		}
 		s.AndroidRun = &AndroidRunRequest{
-			AVDName:  firstNonEmpty(runCfg.AVDName, runCfg.AVDNameSnake),
-			Headless: headless,
+			AVDName:       firstNonEmpty(runCfg.AVDName, runCfg.AVDNameSnake),
+			Headless:      headless,
+			ResetAppState: firstNonNilBool(runCfg.ResetApp, runCfg.ResetAppSnk),
 		}
 	}
 
@@ -285,6 +318,15 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func firstNonNilBool(values ...*bool) *bool {
+	for _, v := range values {
+		if v != nil {
+			return v
+		}
+	}
+	return nil
 }
 
 func applyScenarioPreset(req *StartRequest) error {
@@ -342,6 +384,21 @@ func startHandler(w http.ResponseWriter, r *http.Request, orch *orchestrator.Orc
 		http.Error(w, "invalid request payload", http.StatusBadRequest)
 		return
 	}
+
+	var appCfg *orchestrator.AndroidAppConfig
+	if strings.EqualFold(req.TargetType, "android") && strings.TrimSpace(req.APK) != "" {
+		apkMeta, ok := getUploadedAPK(req.APK)
+		if !ok {
+			http.Error(w, "invalid apk reference: upload id not found", http.StatusBadRequest)
+			return
+		}
+		appCfg = &orchestrator.AndroidAppConfig{
+			APKPath:  apkMeta.Path,
+			Package:  apkMeta.Package,
+			Activity: apkMeta.Activity,
+		}
+	}
+
 	exp, err := orch.StartExperiment(
 		req.FaultType,
 		req.Targets,
@@ -357,6 +414,7 @@ func startHandler(w http.ResponseWriter, r *http.Request, orch *orchestrator.Orc
 		req.Scenario,
 		req.Expected,
 		req.AndroidRun.toOptions(),
+		appCfg,
 	)
 
 	log.Printf("REQ: %+v\n", req)
@@ -480,4 +538,172 @@ func presetsHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+func uploadAPKHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if err := r.ParseMultipartForm(1024 << 20); err != nil {
+		http.Error(w, "invalid multipart form", http.StatusBadRequest)
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		file, header, err = r.FormFile("apk")
+		if err != nil {
+			http.Error(w, "missing apk file field (use file or apk)", http.StatusBadRequest)
+			return
+		}
+	}
+	defer file.Close()
+
+	id := uuid.NewString()
+	baseDir, err := resolveAPKUploadDir()
+	if err != nil {
+		http.Error(w, "failed to resolve upload directory", http.StatusInternalServerError)
+		return
+	}
+	if err := os.MkdirAll(baseDir, 0o755); err != nil {
+		http.Error(w, "failed to prepare upload directory", http.StatusInternalServerError)
+		return
+	}
+
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+	if ext == "" {
+		ext = ".apk"
+	}
+	dstPath := filepath.Join(baseDir, id+ext)
+
+	dst, err := os.Create(dstPath)
+	if err != nil {
+		http.Error(w, "failed to save uploaded apk", http.StatusInternalServerError)
+		return
+	}
+
+	if _, err := io.Copy(dst, file); err != nil {
+		_ = dst.Close()
+		_ = os.Remove(dstPath)
+		http.Error(w, "failed to write uploaded apk", http.StatusInternalServerError)
+		return
+	}
+	_ = dst.Close()
+
+	pkg, activity, err := extractAPKMetadata(dstPath)
+	if err != nil {
+		_ = os.Remove(dstPath)
+		http.Error(w, "failed to extract apk metadata: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	record := uploadedAPK{
+		ID:           id,
+		Path:         dstPath,
+		Package:      pkg,
+		Activity:     activity,
+		OriginalName: header.Filename,
+		UploadedAt:   time.Now(),
+	}
+
+	setUploadedAPK(record)
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"id":       id,
+		"apk":      id,
+		"path":     dstPath,
+		"package":  pkg,
+		"activity": activity,
+	})
+}
+
+func resolveAPKUploadDir() (string, error) {
+	if configured := strings.TrimSpace(os.Getenv("APK_UPLOAD_DIR")); configured != "" {
+		if filepath.IsAbs(configured) {
+			return configured, nil
+		}
+		cwd, err := os.Getwd()
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(cwd, configured), nil
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(cwd, "uploads", "apks"), nil
+}
+
+func setUploadedAPK(apk uploadedAPK) {
+	uploadedAPKMu.Lock()
+	defer uploadedAPKMu.Unlock()
+	uploadedAPKs[apk.ID] = apk
+}
+
+func getUploadedAPK(id string) (uploadedAPK, bool) {
+	uploadedAPKMu.RLock()
+	defer uploadedAPKMu.RUnlock()
+	apk, ok := uploadedAPKs[strings.TrimSpace(id)]
+	return apk, ok
+}
+
+func extractAPKMetadata(apkPath string) (string, string, error) {
+	out, err := runAAPT(apkPath)
+	if err != nil {
+		return "", "", err
+	}
+
+	pkgRe := regexp.MustCompile(`package:\s+name='([^']+)'`)
+	activityRe := regexp.MustCompile(`launchable-activity:\s+name='([^']+)'`)
+
+	pkgMatch := pkgRe.FindStringSubmatch(out)
+	if len(pkgMatch) < 2 {
+		return "", "", fmt.Errorf("package name not found in aapt output")
+	}
+
+	activityMatch := activityRe.FindStringSubmatch(out)
+	if len(activityMatch) < 2 {
+		return "", "", fmt.Errorf("launchable activity not found in aapt output")
+	}
+
+	return strings.TrimSpace(pkgMatch[1]), strings.TrimSpace(activityMatch[1]), nil
+}
+
+func runAAPT(apkPath string) (string, error) {
+	candidates := make([]string, 0, 4)
+
+	if p := strings.TrimSpace(os.Getenv("AAPT_PATH")); p != "" {
+		candidates = append(candidates, p)
+	}
+
+	if sdk := firstNonEmpty(strings.TrimSpace(os.Getenv("ANDROID_SDK_ROOT")), strings.TrimSpace(os.Getenv("ANDROID_HOME"))); sdk != "" {
+		pattern := filepath.Join(sdk, "build-tools", "*", "aapt*")
+		matches, _ := filepath.Glob(pattern)
+		sort.Strings(matches)
+		for i := len(matches) - 1; i >= 0; i-- {
+			candidates = append(candidates, matches[i])
+		}
+	}
+
+	candidates = append(candidates, "aapt")
+
+	var lastErr error
+	for _, bin := range candidates {
+		cmd := exec.Command(bin, "dump", "badging", apkPath)
+		out, err := cmd.CombinedOutput()
+		if err == nil {
+			return string(out), nil
+		}
+		lastErr = fmt.Errorf("%s: %w", bin, err)
+	}
+
+	if lastErr == nil {
+		lastErr = fmt.Errorf("aapt command unavailable")
+	}
+	return "", lastErr
 }
