@@ -1,0 +1,72 @@
+services:
+  api-gateway:
+    build:
+      context: ./test/mock-services/api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - USER_SERVICE_URL=http://user-service:8081
+      - ORDER_SERVICE_URL=http://order-service:8082
+
+  user-service:
+    build:
+      context: ./test/mock-services/user-service
+    ports:
+      - "8081:8081"
+    environment:
+      - PORT=8081
+      - RECOMMENDATION_SERVICE_URL=http://recommendation-service:8087
+
+  order-service:
+    build:
+      context: ./test/mock-services/order-service
+    ports:
+      - "8082:8082"
+    environment:
+      - PORT=8082
+      - PAYMENT_SERVICE_URL=http://payment-service:8083
+      - INVENTORY_SERVICE_URL=http://inventory-service:8084
+      - SHIPPING_SERVICE_URL=http://shipping-service:8085
+
+  payment-service:
+    build:
+      context: ./test/mock-services/payment-service
+    ports:
+      - "8083:8083"
+    environment:
+      - PORT=8083
+
+  inventory-service:
+    build:
+      context: ./test/mock-services/inventory-service
+    ports:
+      - "8084:8084"
+    environment:
+      - PORT=8084
+
+  shipping-service:
+    build:
+      context: ./test/mock-services/shipping-service
+    ports:
+      - "8085:8085"
+    environment:
+      - PORT=8085
+      - NOTIFICATION_SERVICE_URL=http://notification-service:8086
+
+  notification-service:
+    build:
+      context: ./test/mock-services/notification-service
+    ports:
+      - "8086:8086"
+    environment:
+      - PORT=8086
+
+  recommendation-service:
+    build:
+      context: ./test/mock-services/recommendation-service
+    ports:
+      - "8087:8087"
+    environment:
+      - PORT=8087
+      - INVENTORY_SERVICE_URL=http://inventory-service:8084

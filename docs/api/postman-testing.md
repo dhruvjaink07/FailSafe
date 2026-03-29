@@ -13,7 +13,7 @@
 
 Create a Postman environment with:
 
-- `baseUrl` = `http://localhost:8080`
+- `baseUrl` = `http://localhost:8000`
 - `apkId`
 - `experimentId`
 

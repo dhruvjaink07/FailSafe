@@ -20,7 +20,7 @@ services:
     environment:
       DB_URL: postgres://failsafe:failsafe@postgres:5432/failsafe
     ports:
-      - "8080:8080"
+      - "8000:8000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 
