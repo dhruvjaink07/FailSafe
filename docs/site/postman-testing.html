@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Postman Testing Guide</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Postman Testing Guide</h1>
+    <p>FailSafe controller API documentation</p>
+  </header>
+
+  <div class="layout">
+    <nav>
+      <h2>Pages</h2>
+      
+      <a href="index.html" >Overview</a>
+      
+      <a href="backend-api.html" >Backend API Contract</a>
+      
+      <a href="frontend-testing.html" >Frontend Integration</a>
+      
+      <a href="postman-testing.html" class="active">Postman Testing Guide</a>
+      
+    </nav>
+
+    <main>
+      <h1 id="postman-testing-guide">Postman Testing Guide</h1>
+<h2 id="collection-structure-recommended">Collection Structure (Recommended)</h2>
+<ol>
+<li>Health Check</li>
+<li>Upload APK</li>
+<li>Start Experiment</li>
+<li>Poll Android Status</li>
+<li>Get Final Metrics</li>
+<li>Stop Experiment (optional)</li>
+</ol>
+<h2 id="environment-variables">Environment Variables</h2>
+<p>Create a Postman environment with:</p>
+<ul>
+<li><code>baseUrl</code> = <code>http://localhost:8080</code></li>
+<li><code>apkId</code></li>
+<li><code>experimentId</code></li>
+</ul>
+<h2 id="1-health-check">1) Health Check</h2>
+<pre><code class="language-http">GET {{baseUrl}}/health
+</code></pre>
+<h2 id="2-upload-apk">2) Upload APK</h2>
+<pre><code class="language-http">POST {{baseUrl}}/upload/apk
+</code></pre>
+<p>Body: form-data</p>
+<ul>
+<li>key: <code>file</code> (type file)</li>
+<li>value: local apk file</li>
+</ul>
+<p>Test script:</p>
+<pre><code class="language-javascript">const data = pm.response.json();
+pm.environment.set(&quot;apkId&quot;, data.apk || data.id);
+</code></pre>
+<h2 id="3-start-experiment">3) Start Experiment</h2>
+<pre><code class="language-http">POST {{baseUrl}}/experiment/start
+Content-Type: application/json
+</code></pre>
+<p>Contract notes for this request:</p>
+<ul>
+<li>Top-level keys can be snake_case or camelCase aliases.</li>
+<li><code>expected</code> keys should be snake_case: <code>app_state</code>, <code>running</code>, <code>not_crash</code>, <code>not_anr</code>, <code>should_recover</code>.</li>
+<li>Scenario step keys should use <code>duration_seconds</code> (not <code>duration</code>).</li>
+</ul>
+<p>Body example:</p>
+<pre><code class="language-json">{
+  &quot;fault_type&quot;: &quot;kill_app&quot;,
+  &quot;targets&quot;: [&quot;com.example.code&quot;],
+  &quot;target_type&quot;: &quot;android&quot;,
+  &quot;observation_type&quot;: &quot;android&quot;,
+  &quot;duration_seconds&quot;: 70,
+  &quot;apk&quot;: &quot;{{apkId}}&quot;,
+  &quot;android_run&quot;: {
+    &quot;avd_name&quot;: &quot;Pixel_8a&quot;,
+    &quot;headless&quot;: true,
+    &quot;reset_app_state&quot;: true
+  },
+  &quot;scenarios&quot;: [
+    { &quot;type&quot;: &quot;network_disable&quot;, &quot;at&quot;: 10, &quot;duration_seconds&quot;: 6 },
+    { &quot;type&quot;: &quot;network_enable&quot;, &quot;at&quot;: 18, &quot;duration_seconds&quot;: 1 },
+    { &quot;type&quot;: &quot;kill_app&quot;, &quot;at&quot;: 30, &quot;duration_seconds&quot;: 1 },
+    { &quot;type&quot;: &quot;foreground_app&quot;, &quot;at&quot;: 40, &quot;duration_seconds&quot;: 2 }
+  ],
+  &quot;expected&quot;: {
+    &quot;running&quot;: true,
+    &quot;not_crash&quot;: true,
+    &quot;not_anr&quot;: true,
+    &quot;should_recover&quot;: true
+  }
+}
+</code></pre>
+<p>Test script:</p>
+<pre><code class="language-javascript">const data = pm.response.json();
+pm.environment.set(&quot;experimentId&quot;, data.id);
+</code></pre>
+<h3 id="additional-start-body-templates">Additional Start Body Templates</h3>
+<p>Use these in the same request to run different fault models quickly.</p>
+<h4 id="template-a-android-kill-and-relaunch">Template A: Android kill and relaunch</h4>
+<pre><code class="language-json">{
+  &quot;fault_type&quot;: &quot;kill_app&quot;,
+  &quot;targets&quot;: [&quot;com.example.code&quot;],
+  &quot;target_type&quot;: &quot;android&quot;,
+  &quot;observation_type&quot;: &quot;android&quot;,
+  &quot;duration_seconds&quot;: 70,
+  &quot;apk&quot;: &quot;{{apkId}}&quot;,
+  &quot;android_run&quot;: {
+    &quot;avd_name&quot;: &quot;Pixel_8a&quot;,
+    &quot;headless&quot;: true,
+    &quot;reset_app_state&quot;: true
+  },
+  &quot;scenarios&quot;: [
+    { &quot;type&quot;: &quot;kill_app&quot;, &quot;at&quot;: 20, &quot;duration_seconds&quot;: 1 },
+    { &quot;type&quot;: &quot;foreground_app&quot;, &quot;at&quot;: 30, &quot;duration_seconds&quot;: 2 }
+  ],
+  &quot;expected&quot;: {
+    &quot;running&quot;: true,
+    &quot;not_crash&quot;: true,
+    &quot;not_anr&quot;: true,
+    &quot;should_recover&quot;: true
+  }
+}
+</code></pre>
+<h4 id="template-b-android-network-degrade-and-recover">Template B: Android network degrade and recover</h4>
+<pre><code class="language-json">{
+  &quot;fault_type&quot;: &quot;network_disable&quot;,
+  &quot;targets&quot;: [&quot;com.example.code&quot;],
+  &quot;target_type&quot;: &quot;android&quot;,
+  &quot;observation_type&quot;: &quot;android&quot;,
+  &quot;duration_seconds&quot;: 85,
+  &quot;apk&quot;: &quot;{{apkId}}&quot;,
+  &quot;android_run&quot;: {
+    &quot;avd_name&quot;: &quot;Pixel_8a&quot;,
+    &quot;headless&quot;: true,
+    &quot;reset_app_state&quot;: false
+  },
+  &quot;scenarios&quot;: [
+    { &quot;type&quot;: &quot;network_disable&quot;, &quot;at&quot;: 8, &quot;duration_seconds&quot;: 7 },
+    { &quot;type&quot;: &quot;network_enable&quot;, &quot;at&quot;: 18, &quot;duration_seconds&quot;: 1 },
+    { &quot;type&quot;: &quot;network_flaky&quot;, &quot;at&quot;: 28, &quot;duration_seconds&quot;: 10 },
+    { &quot;type&quot;: &quot;network_latency&quot;, &quot;at&quot;: 44, &quot;duration_seconds&quot;: 8 }
+  ],
+  &quot;expected&quot;: {
+    &quot;running&quot;: true,
+    &quot;not_crash&quot;: true,
+    &quot;not_anr&quot;: true,
+    &quot;should_recover&quot;: true
+  }
+}
+</code></pre>
+<h4 id="template-c-android-permission-and-lifecycle-stress">Template C: Android permission and lifecycle stress</h4>
+<pre><code class="language-json">{
+  &quot;fault_type&quot;: &quot;revoke_location&quot;,
+  &quot;targets&quot;: [&quot;com.example.code&quot;],
+  &quot;target_type&quot;: &quot;android&quot;,
+  &quot;observation_type&quot;: &quot;android&quot;,
+  &quot;duration_seconds&quot;: 80,
+  &quot;apk&quot;: &quot;{{apkId}}&quot;,
+  &quot;android_run&quot;: {
+    &quot;avd_name&quot;: &quot;Pixel_8a&quot;,
+    &quot;headless&quot;: true,
+    &quot;reset_app_state&quot;: false
+  },
+  &quot;scenarios&quot;: [
+    { &quot;type&quot;: &quot;revoke_location&quot;, &quot;at&quot;: 10, &quot;duration_seconds&quot;: 2 },
+    { &quot;type&quot;: &quot;background_app&quot;, &quot;at&quot;: 22, &quot;duration_seconds&quot;: 4 },
+    { &quot;type&quot;: &quot;foreground_app&quot;, &quot;at&quot;: 32, &quot;duration_seconds&quot;: 2 }
+  ],
+  &quot;expected&quot;: {
+    &quot;running&quot;: true,
+    &quot;not_crash&quot;: true,
+    &quot;not_anr&quot;: true,
+    &quot;should_recover&quot;: true
+  }
+}
+</code></pre>
+<h4 id="template-d-docker-latency-and-packet-loss">Template D: Docker latency and packet loss</h4>
+<pre><code class="language-json">{
+  &quot;fault_type&quot;: &quot;network_delay&quot;,
+  &quot;targets&quot;: [&quot;svc-b&quot;],
+  &quot;target_type&quot;: &quot;docker&quot;,
+  &quot;observation_type&quot;: &quot;http&quot;,
+  &quot;observed_endpoints&quot;: [&quot;http://svc-a&quot;, &quot;http://svc-b&quot;, &quot;http://svc-c&quot;],
+  &quot;duration_seconds&quot;: 60,
+  &quot;scenarios&quot;: [
+    { &quot;type&quot;: &quot;network_delay&quot;, &quot;at&quot;: 5, &quot;duration_seconds&quot;: 20 },
+    { &quot;type&quot;: &quot;packet_loss&quot;, &quot;at&quot;: 30, &quot;duration_seconds&quot;: 15 }
+  ],
+  &quot;expected&quot;: {
+    &quot;running&quot;: true
+  }
+}
+</code></pre>
+<h2 id="4-poll-android-status">4) Poll Android Status</h2>
+<pre><code class="language-http">GET {{baseUrl}}/experiment/android/status?id={{experimentId}}
+</code></pre>
+<p>Use Collection Runner with delay (for example 2000 ms) until terminal state.</p>
+<h2 id="5-get-final-metrics">5) Get Final Metrics</h2>
+<pre><code class="language-http">GET {{baseUrl}}/experiment/metrics?id={{experimentId}}
+</code></pre>
+<p>Expected Android fields:</p>
+<ul>
+<li><code>health</code></li>
+<li><code>recovery</code></li>
+<li><code>timeline</code></li>
+<li><code>state_transitions</code></li>
+<li><code>summary</code></li>
+<li><code>validation</code></li>
+</ul>
+<h2 id="6-optional-stop">6) Optional Stop</h2>
+<pre><code class="language-http">POST {{baseUrl}}/experiment/stop?id={{experimentId}}
+</code></pre>
+<h2 id="sql-validation-after-postman-run">SQL Validation After Postman Run</h2>
+<p>Run in postgres:</p>
+<pre><code class="language-sql">SELECT experiment_id, updated_at
+FROM android_experiment_report
+ORDER BY updated_at DESC
+LIMIT 5;
+</code></pre>
+<pre><code class="language-sql">SELECT experiment_id, summary_result, failure_type, recovered, auto_recovered, recovery_time_ms
+FROM android_experiment_summary
+ORDER BY updated_at DESC
+LIMIT 5;
+</code></pre>
+<pre><code class="language-sql">SELECT experiment_id, count(*) AS raw_samples
+FROM metrics_raw
+GROUP BY experiment_id
+ORDER BY max(timestamp) DESC
+LIMIT 5;
+</code></pre>
+
+    </main>
+  </div>
+
+  <footer>
+    Generated from docs/api markdown. API behavior only.
+  </footer>
+</body>
+</html>

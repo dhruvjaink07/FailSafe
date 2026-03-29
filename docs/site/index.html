@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FailSafe API Reference</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>FailSafe API Reference</h1>
+    <p>FailSafe controller API documentation</p>
+  </header>
+
+  <div class="layout">
+    <nav>
+      <h2>Pages</h2>
+      
+      <a href="index.html" class="active">Overview</a>
+      
+      <a href="backend-api.html" >Backend API Contract</a>
+      
+      <a href="frontend-testing.html" >Frontend Integration</a>
+      
+      <a href="postman-testing.html" >Postman Testing Guide</a>
+      
+    </nav>
+
+    <main>
+      <h1 id="failsafe-api-reference">FailSafe API Reference</h1>
+<h2 id="base-url">Base URL</h2>
+<pre><code class="language-text">http://localhost:8080
+</code></pre>
+<h2 id="audience">Audience</h2>
+<ul>
+<li>Backend engineers integrating resilience orchestration.</li>
+<li>Frontend engineers building test dashboards and run controls.</li>
+<li>QA and SRE teams running Postman-based resilience tests.</li>
+</ul>
+<h2 id="endpoint-map">Endpoint Map</h2>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Method</th>
+<th>Path</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Health</td>
+<td>GET</td>
+<td>/health</td>
+<td>Liveness check</td>
+</tr>
+<tr>
+<td>APK upload</td>
+<td>POST</td>
+<td>/upload/apk</td>
+<td>Upload APK and extract package/activity</td>
+</tr>
+<tr>
+<td>Experiment</td>
+<td>POST</td>
+<td>/experiment/start</td>
+<td>Start Docker or Android resilience run</td>
+</tr>
+<tr>
+<td>Experiment</td>
+<td>GET</td>
+<td>/experiment/get?id=...</td>
+<td>Fetch experiment object and lifecycle state</td>
+</tr>
+<tr>
+<td>Experiment</td>
+<td>GET</td>
+<td>/experiment/metrics?id=...</td>
+<td>Fetch final/full metrics report</td>
+</tr>
+<tr>
+<td>Android runtime</td>
+<td>GET</td>
+<td>/experiment/android/status?id=...</td>
+<td>Lightweight polling payload during active run</td>
+</tr>
+<tr>
+<td>Experiment</td>
+<td>POST</td>
+<td>/experiment/stop?id=...</td>
+<td>Stop an active run</td>
+</tr>
+<tr>
+<td>Presets</td>
+<td>GET</td>
+<td>/scenarios/presets</td>
+<td>List available Android scenario presets and fault types</td>
+</tr>
+</tbody>
+</table>
+<h2 id="data-persistence">Data Persistence</h2>
+<h3 id="shared-tables">Shared tables</h3>
+<ul>
+<li><code>experiments</code>: lifecycle and run metadata.</li>
+<li><code>metrics_raw</code>: time-series samples.</li>
+<li><code>metrics_aggregated</code>: aggregated endpoint metrics.</li>
+</ul>
+<h3 id="docker-report-table">Docker report table</h3>
+<ul>
+<li><code>experiment_summary</code>: Docker/system summary fields.</li>
+</ul>
+<h3 id="android-specific-report-tables">Android-specific report tables</h3>
+<ul>
+<li><code>android_experiment_summary</code>: typed Android summary fields.</li>
+<li><code>android_experiment_report</code>: full Android report JSON (<code>report</code> JSONB).</li>
+</ul>
+<h2 id="see-also">See Also</h2>
+<ul>
+<li>Backend contract details: <code>docs/api/backend-api.md</code></li>
+<li>Frontend workflow details: <code>docs/api/frontend-testing.md</code></li>
+<li>Postman examples: <code>docs/api/postman-testing.md</code></li>
+</ul>
+
+    </main>
+  </div>
+
+  <footer>
+    Generated from docs/api markdown. API behavior only.
+  </footer>
+</body>
+</html>

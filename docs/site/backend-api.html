@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Backend API Contract</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Backend API Contract</h1>
+    <p>FailSafe controller API documentation</p>
+  </header>
+
+  <div class="layout">
+    <nav>
+      <h2>Pages</h2>
+      
+      <a href="index.html" >Overview</a>
+      
+      <a href="backend-api.html" class="active">Backend API Contract</a>
+      
+      <a href="frontend-testing.html" >Frontend Integration</a>
+      
+      <a href="postman-testing.html" >Postman Testing Guide</a>
+      
+    </nav>
+
+    <main>
+      <h1 id="backend-api-contract">Backend API Contract</h1>
+<h2 id="authentication">Authentication</h2>
+<p>Current API is unauthenticated for local/dev usage. Add auth middleware before public exposure.</p>
+<h2 id="content-type">Content Type</h2>
+<ul>
+<li>JSON endpoints: <code>Content-Type: application/json</code></li>
+<li>APK upload endpoint: <code>multipart/form-data</code></li>
+</ul>
+<h2 id="1-health">1) Health</h2>
+<h3 id="request">Request</h3>
+<pre><code class="language-http">GET /health
+</code></pre>
+<h3 id="response">Response</h3>
+<pre><code class="language-text">OK
+</code></pre>
+<h2 id="2-upload-apk">2) Upload APK</h2>
+<h3 id="request-1">Request</h3>
+<pre><code class="language-http">POST /upload/apk
+Content-Type: multipart/form-data
+</code></pre>
+<p>Form-data fields:</p>
+<ul>
+<li><code>file</code> (preferred) or <code>apk</code>: binary APK file</li>
+</ul>
+<h3 id="response-1">Response</h3>
+<pre><code class="language-json">{
+  &quot;id&quot;: &quot;384f624c-c218-43de-b013-65331eb6edaf&quot;,
+  &quot;apk&quot;: &quot;384f624c-c218-43de-b013-65331eb6edaf&quot;,
+  &quot;path&quot;: &quot;D:\\FailSafe\\uploads\\apks\\384f624c-c218-43de-b013-65331eb6edaf.apk&quot;,
+  &quot;package&quot;: &quot;com.example.code&quot;,
+  &quot;activity&quot;: &quot;com.example.code.MainActivity&quot;
+}
+</code></pre>
+<h2 id="3-start-experiment">3) Start Experiment</h2>
+<h3 id="request-2">Request</h3>
+<pre><code class="language-http">POST /experiment/start
+</code></pre>
+<h3 id="payload">Payload</h3>
+<p>Top-level request accepts both snake_case and camelCase aliases for most fields.
+The <code>expected</code> and <code>scenario</code> object fields are strict and should be sent in snake_case as shown below.</p>
+<pre><code class="language-json">{
+  &quot;fault_type&quot;: &quot;kill_app&quot;,
+  &quot;targets&quot;: [&quot;com.example.code&quot;],
+  &quot;target_type&quot;: &quot;android&quot;,
+  &quot;observation_type&quot;: &quot;android&quot;,
+  &quot;duration_seconds&quot;: 70,
+  &quot;apk&quot;: &quot;384f624c-c218-43de-b013-65331eb6edaf&quot;,
+  &quot;android_run&quot;: {
+    &quot;avd_name&quot;: &quot;Pixel_8a&quot;,
+    &quot;headless&quot;: true,
+    &quot;reset_app_state&quot;: true
+  },
+  &quot;scenarios&quot;: [
+    { &quot;type&quot;: &quot;network_disable&quot;, &quot;at&quot;: 10, &quot;duration_seconds&quot;: 6 },
+    { &quot;type&quot;: &quot;network_enable&quot;, &quot;at&quot;: 18, &quot;duration_seconds&quot;: 1 },
+    { &quot;type&quot;: &quot;kill_app&quot;, &quot;at&quot;: 30, &quot;duration_seconds&quot;: 1 },
+    { &quot;type&quot;: &quot;foreground_app&quot;, &quot;at&quot;: 40, &quot;duration_seconds&quot;: 2 }
+  ],
+  &quot;expected&quot;: {
+    &quot;running&quot;: true,
+    &quot;not_crash&quot;: true,
+    &quot;not_anr&quot;: true,
+    &quot;should_recover&quot;: true
+  }
+}
+</code></pre>
+<h3 id="key-fields">Key Fields</h3>
+<ul>
+<li><code>fault_type</code>: primary fault for non-scenario mode.</li>
+<li><code>targets</code>: containers (Docker) or package targets (Android).</li>
+<li><code>target_type</code>: <code>docker</code> or <code>android</code>.</li>
+<li><code>observation_type</code>: <code>http</code> or <code>android</code>.</li>
+<li><code>apk</code>: uploaded APK id from <code>/upload/apk</code>.</li>
+<li><code>android_run.headless</code>: emulator background mode.</li>
+<li><code>android_run.reset_app_state</code>: clear app data before run.</li>
+<li><code>scenarios</code>: timed fault sequence.</li>
+<li><code>expected</code>: expectation-based validation contract.</li>
+</ul>
+<h3 id="required-minimum-for-valid-start">Required Minimum For Valid Start</h3>
+<ul>
+<li><code>fault_type</code>: required.</li>
+<li><code>targets</code>: required and non-empty.</li>
+<li><code>duration_seconds</code> (or <code>duration</code>): required and must be greater than 0.</li>
+</ul>
+<h3 id="accepted-top-level-alias-keys">Accepted Top-Level Alias Keys</h3>
+<ul>
+<li><code>fault_type</code> or <code>faultType</code></li>
+<li><code>target_type</code> or <code>targetType</code></li>
+<li><code>observation_type</code> or <code>observationType</code></li>
+<li><code>observed_endpoints</code> or <code>observedEndpoints</code></li>
+<li><code>duration_seconds</code> or <code>duration</code></li>
+<li><code>scenario</code> or <code>scenarios</code></li>
+<li><code>scenario_preset</code> or <code>scenarioPreset</code></li>
+<li><code>android_run</code> or <code>androidRun</code></li>
+<li><code>apk</code>, <code>apk_id</code>, <code>uploadedApkId</code>, or <code>uploaded_apk_id</code></li>
+</ul>
+<h3 id="expected-object-strict-fields">Expected Object (Strict Fields)</h3>
+<p>Use these exact keys inside <code>expected</code>:</p>
+<ul>
+<li><code>app_state</code></li>
+<li><code>running</code></li>
+<li><code>not_crash</code></li>
+<li><code>not_anr</code></li>
+<li><code>should_recover</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-json">&quot;expected&quot;: {
+  &quot;app_state&quot;: &quot;foreground&quot;,
+  &quot;running&quot;: true,
+  &quot;not_crash&quot;: true,
+  &quot;not_anr&quot;: true,
+  &quot;should_recover&quot;: true
+}
+</code></pre>
+<h3 id="scenario-step-object-strict-fields">Scenario Step Object (Strict Fields)</h3>
+<p>Each step in <code>scenario</code> or <code>scenarios</code> should use:</p>
+<ul>
+<li><code>type</code></li>
+<li><code>at</code></li>
+<li><code>duration_seconds</code> (optional)</li>
+<li><code>intensity</code> (optional)</li>
+<li><code>trigger</code> (optional object)</li>
+</ul>
+<p>Optional trigger object fields:</p>
+<ul>
+<li><code>type</code></li>
+<li><code>pattern</code></li>
+<li><code>timeout_seconds</code></li>
+</ul>
+<h3 id="common-payload-mistakes">Common Payload Mistakes</h3>
+<ul>
+<li>Using <code>targetContainers</code> instead of <code>targets</code>.</li>
+<li>Using <code>expected.notCrash</code> or <code>expected.notAnr</code> instead of <code>expected.not_crash</code> and <code>expected.not_anr</code>.</li>
+<li>Using <code>scenarios[].duration</code> instead of <code>scenarios[].duration_seconds</code>.</li>
+<li>Sending <code>duration_seconds: 0</code> which fails with <code>invalid duration</code>.</li>
+</ul>
+<h3 id="response-2">Response</h3>
+<p>Returns experiment object with id, state, phase, and metadata.</p>
+<h3 id="backend-testing-request-bodies">Backend Testing Request Bodies</h3>
+<p>Use these payloads directly for integration tests against <code>POST /experiment/start</code>.</p>
+<h4 id="a-android-app-kill-and-recovery-validation">A) Android app kill and recovery validation</h4>
+<pre><code class="language-json">{
+  &quot;fault_type&quot;: &quot;kill_app&quot;,
+  &quot;targets&quot;: [&quot;com.example.code&quot;],
+  &quot;target_type&quot;: &quot;android&quot;,
+  &quot;observation_type&quot;: &quot;android&quot;,
+  &quot;duration_seconds&quot;: 70,
+  &quot;apk&quot;: &quot;{{apkId}}&quot;,
+  &quot;android_run&quot;: {
+    &quot;avd_name&quot;: &quot;Pixel_8a&quot;,
+    &quot;headless&quot;: true,
+    &quot;reset_app_state&quot;: true
+  },
+  &quot;scenarios&quot;: [
+    { &quot;type&quot;: &quot;kill_app&quot;, &quot;at&quot;: 25, &quot;duration_seconds&quot;: 1 },
+    { &quot;type&quot;: &quot;foreground_app&quot;, &quot;at&quot;: 33, &quot;duration_seconds&quot;: 2 }
+  ],
+  &quot;expected&quot;: {
+    &quot;running&quot;: true,
+    &quot;not_crash&quot;: true,
+    &quot;not_anr&quot;: true,
+    &quot;should_recover&quot;: true
+  }
+}
+</code></pre>
+<h4 id="b-android-network-chaos-sequence">B) Android network chaos sequence</h4>
+<pre><code class="language-json">{
+  &quot;fault_type&quot;: &quot;network_disable&quot;,
+  &quot;targets&quot;: [&quot;com.example.code&quot;],
+  &quot;target_type&quot;: &quot;android&quot;,
+  &quot;observation_type&quot;: &quot;android&quot;,
+  &quot;duration_seconds&quot;: 90,
+  &quot;apk&quot;: &quot;{{apkId}}&quot;,
+  &quot;android_run&quot;: {
+    &quot;avd_name&quot;: &quot;Pixel_8a&quot;,
+    &quot;headless&quot;: true,
+    &quot;reset_app_state&quot;: false
+  },
+  &quot;scenarios&quot;: [
+    { &quot;type&quot;: &quot;network_disable&quot;, &quot;at&quot;: 10, &quot;duration_seconds&quot;: 8 },
+    { &quot;type&quot;: &quot;network_enable&quot;, &quot;at&quot;: 20, &quot;duration_seconds&quot;: 1 },
+    { &quot;type&quot;: &quot;network_flaky&quot;, &quot;at&quot;: 32, &quot;duration_seconds&quot;: 12 },
+    { &quot;type&quot;: &quot;network_latency&quot;, &quot;at&quot;: 50, &quot;duration_seconds&quot;: 10 },
+    { &quot;type&quot;: &quot;network_packet_loss&quot;, &quot;at&quot;: 64, &quot;duration_seconds&quot;: 10 }
+  ],
+  &quot;expected&quot;: {
+    &quot;running&quot;: true,
+    &quot;not_crash&quot;: true,
+    &quot;not_anr&quot;: true,
+    &quot;should_recover&quot;: true
+  }
+}
+</code></pre>
+<h4 id="c-android-permission-disruption-and-foreground-recovery">C) Android permission disruption and foreground recovery</h4>
+<pre><code class="language-json">{
+  &quot;fault_type&quot;: &quot;revoke_camera&quot;,
+  &quot;targets&quot;: [&quot;com.example.code&quot;],
+  &quot;target_type&quot;: &quot;android&quot;,
+  &quot;observation_type&quot;: &quot;android&quot;,
+  &quot;duration_seconds&quot;: 80,
+  &quot;apk&quot;: &quot;{{apkId}}&quot;,
+  &quot;android_run&quot;: {
+    &quot;avd_name&quot;: &quot;Pixel_8a&quot;,
+    &quot;headless&quot;: true,
+    &quot;reset_app_state&quot;: false
+  },
+  &quot;scenarios&quot;: [
+    { &quot;type&quot;: &quot;revoke_camera&quot;, &quot;at&quot;: 12, &quot;duration_seconds&quot;: 2 },
+    { &quot;type&quot;: &quot;background_app&quot;, &quot;at&quot;: 24, &quot;duration_seconds&quot;: 4 },
+    { &quot;type&quot;: &quot;foreground_app&quot;, &quot;at&quot;: 35, &quot;duration_seconds&quot;: 2 }
+  ],
+  &quot;expected&quot;: {
+    &quot;running&quot;: true,
+    &quot;not_crash&quot;: true,
+    &quot;not_anr&quot;: true,
+    &quot;should_recover&quot;: true
+  }
+}
+</code></pre>
+<h4 id="d-docker-network-delay-cascade-test">D) Docker network delay cascade test</h4>
+<pre><code class="language-json">{
+  &quot;fault_type&quot;: &quot;network_delay&quot;,
+  &quot;targets&quot;: [&quot;svc-b&quot;],
+  &quot;target_type&quot;: &quot;docker&quot;,
+  &quot;observation_type&quot;: &quot;http&quot;,
+  &quot;observed_endpoints&quot;: [&quot;http://svc-a&quot;, &quot;http://svc-b&quot;, &quot;http://svc-c&quot;],
+  &quot;duration_seconds&quot;: 60,
+  &quot;scenarios&quot;: [
+    { &quot;type&quot;: &quot;network_delay&quot;, &quot;at&quot;: 5, &quot;duration_seconds&quot;: 20 },
+    { &quot;type&quot;: &quot;packet_loss&quot;, &quot;at&quot;: 30, &quot;duration_seconds&quot;: 15 }
+  ],
+  &quot;expected&quot;: {
+    &quot;running&quot;: true
+  }
+}
+</code></pre>
+<h4 id="e-docker-resource-stress-test">E) Docker resource stress test</h4>
+<pre><code class="language-json">{
+  &quot;fault_type&quot;: &quot;cpu_stress&quot;,
+  &quot;targets&quot;: [&quot;svc-c&quot;],
+  &quot;target_type&quot;: &quot;docker&quot;,
+  &quot;observation_type&quot;: &quot;http&quot;,
+  &quot;observed_endpoints&quot;: [&quot;http://svc-a&quot;, &quot;http://svc-b&quot;, &quot;http://svc-c&quot;],
+  &quot;duration_seconds&quot;: 75,
+  &quot;scenarios&quot;: [
+    { &quot;type&quot;: &quot;cpu_stress&quot;, &quot;at&quot;: 10, &quot;duration_seconds&quot;: 25 },
+    { &quot;type&quot;: &quot;memory_stress&quot;, &quot;at&quot;: 45, &quot;duration_seconds&quot;: 20 }
+  ],
+  &quot;expected&quot;: {
+    &quot;running&quot;: true
+  }
+}
+</code></pre>
+<h2 id="4-get-experiment">4) Get Experiment</h2>
+<h3 id="request-3">Request</h3>
+<pre><code class="language-http">GET /experiment/get?id={experiment_id}
+</code></pre>
+<h3 id="response-3">Response</h3>
+<p>Experiment metadata object (<code>state</code>, <code>phase</code>, timestamps, baseline fields, etc.).</p>
+<h2 id="5-get-metrics">5) Get Metrics</h2>
+<h3 id="request-4">Request</h3>
+<pre><code class="language-http">GET /experiment/metrics?id={experiment_id}
+</code></pre>
+<h3 id="response-4">Response</h3>
+<p>For Android runs, response includes:</p>
+<ul>
+<li><code>health</code></li>
+<li><code>recovery</code></li>
+<li><code>stability</code></li>
+<li><code>state_transitions</code></li>
+<li><code>timeline</code></li>
+<li><code>replay_hints</code></li>
+<li><code>validation</code></li>
+<li><code>summary</code></li>
+<li><code>scenario</code></li>
+</ul>
+<h2 id="6-android-live-status">6) Android Live Status</h2>
+<h3 id="request-5">Request</h3>
+<pre><code class="language-http">GET /experiment/android/status?id={experiment_id}
+</code></pre>
+<h3 id="response-5">Response</h3>
+<p>Lightweight polling payload containing:</p>
+<ul>
+<li><code>phase</code></li>
+<li><code>state</code></li>
+<li><code>health</code></li>
+<li><code>progress</code></li>
+<li><code>timeline</code></li>
+<li>recent transitions and fault events</li>
+</ul>
+<h2 id="7-stop-experiment">7) Stop Experiment</h2>
+<h3 id="request-6">Request</h3>
+<pre><code class="language-http">POST /experiment/stop?id={experiment_id}
+</code></pre>
+<h3 id="response-6">Response</h3>
+<pre><code class="language-text">experiment stopped
+</code></pre>
+<h2 id="8-scenario-presets">8) Scenario Presets</h2>
+<h3 id="request-7">Request</h3>
+<pre><code class="language-http">GET /scenarios/presets
+</code></pre>
+<h3 id="response-7">Response</h3>
+<p>Preset names, fault types, and trigger types.</p>
+<h2 id="error-responses">Error Responses</h2>
+<ul>
+<li><code>400 Bad Request</code>: invalid payload, missing id, invalid APK id, preset load failure.</li>
+<li><code>405 Method Not Allowed</code>: wrong method for endpoint.</li>
+</ul>
+
+    </main>
+  </div>
+
+  <footer>
+    Generated from docs/api markdown. API behavior only.
+  </footer>
+</body>
+</html>

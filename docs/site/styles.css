@@ -1,0 +1,150 @@
+:root {
+  --bg: #f6f8fb;
+  --panel: #ffffff;
+  --ink: #0f172a;
+  --muted: #475569;
+  --line: #dbe3ef;
+  --brand: #0b66c3;
+  --brand-2: #0a4f96;
+  --ok: #087443;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  background: linear-gradient(180deg, #f7fafc, #f2f6fc 55%, #eef3fb);
+  color: var(--ink);
+}
+
+header {
+  background: linear-gradient(120deg, #0d2748, #0b66c3);
+  color: #fff;
+  padding: 28px 20px;
+}
+
+header h1 {
+  margin: 0 0 8px;
+  font-size: 30px;
+}
+
+header p {
+  margin: 0;
+  color: #d6e8ff;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 20px;
+  max-width: 1200px;
+  margin: 20px auto;
+  padding: 0 16px 24px;
+}
+
+nav {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  height: fit-content;
+  position: sticky;
+  top: 16px;
+}
+
+nav h2 {
+  font-size: 15px;
+  margin: 0 0 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+nav a {
+  display: block;
+  text-decoration: none;
+  color: var(--ink);
+  padding: 10px 10px;
+  border-radius: 8px;
+  margin: 4px 0;
+}
+
+nav a:hover, nav a.active {
+  background: #eaf3ff;
+  color: var(--brand-2);
+}
+
+main {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 22px;
+}
+
+h2 { margin-top: 0; }
+h3 { margin-top: 26px; }
+p, li { line-height: 1.55; }
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px;
+  margin: 12px 0;
+  background: #fbfdff;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+}
+
+.table th, .table td {
+  border: 1px solid var(--line);
+  padding: 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.code {
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 10px;
+  padding: 12px;
+  overflow-x: auto;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 13px;
+  white-space: pre;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e8f3ff;
+  color: var(--brand-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ok {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+footer {
+  max-width: 1200px;
+  margin: 0 auto 26px;
+  color: var(--muted);
+  padding: 0 16px;
+}
+
+@media (max-width: 940px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  nav {
+    position: static;
+  }
+}
