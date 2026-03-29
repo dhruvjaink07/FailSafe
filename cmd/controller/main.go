@@ -82,8 +82,8 @@ func main() {
 		presetsHandler(w, r)
 	})
 
-	log.Println("Server running on :8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Println("Server running on :8000")
+	log.Fatal(http.ListenAndServe(":8000", nil))
 }
 
 func loadDotEnv(path string) error {

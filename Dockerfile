@@ -11,6 +11,6 @@ COPY . .
 
 RUN go build -o failsafe ./cmd/controller/main.go
 
-EXPOSE 8080
+EXPOSE 8000
 
 CMD ["./failsafe"]
