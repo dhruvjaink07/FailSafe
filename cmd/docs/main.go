@@ -70,6 +70,54 @@ const pageTemplate = `<!doctype html>
   <footer>
     Generated from docs/api markdown. API behavior only.
   </footer>
+
+	<script>
+		(function () {
+			function fallbackCopy(text) {
+				var ta = document.createElement('textarea');
+				ta.value = text;
+				ta.setAttribute('readonly', '');
+				ta.style.position = 'absolute';
+				ta.style.left = '-9999px';
+				document.body.appendChild(ta);
+				ta.select();
+				document.execCommand('copy');
+				document.body.removeChild(ta);
+			}
+
+			function copyText(text) {
+				if (navigator.clipboard && window.isSecureContext) {
+					return navigator.clipboard.writeText(text);
+				}
+				return new Promise(function (resolve) {
+					fallbackCopy(text);
+					resolve();
+				});
+			}
+
+			var blocks = document.querySelectorAll('pre, .code');
+			blocks.forEach(function (block) {
+				var wrap = document.createElement('div');
+				wrap.className = 'copy-wrap';
+				block.parentNode.insertBefore(wrap, block);
+				wrap.appendChild(block);
+
+				var btn = document.createElement('button');
+				btn.className = 'copy-btn';
+				btn.type = 'button';
+				btn.textContent = 'Copy';
+				btn.addEventListener('click', function () {
+					var text = block.innerText || block.textContent || '';
+					copyText(text).then(function () {
+						var old = btn.textContent;
+						btn.textContent = 'Copied';
+						setTimeout(function () { btn.textContent = old; }, 1200);
+					});
+				});
+				wrap.appendChild(btn);
+			});
+		})();
+	</script>
 </body>
 </html>`
 
@@ -202,6 +250,7 @@ func ensureStyleSheet(siteDir string) error {
 body {
   margin: 0;
   font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+	font-size: 17px;
   background: linear-gradient(180deg, #f7fafc, #f2f6fc 55%, #eef3fb);
   color: var(--ink);
 }
@@ -210,28 +259,33 @@ header {
   color: #fff;
   padding: 28px 20px;
 }
+header h1 {
+	margin: 0 0 8px;
+	font-size: 36px;
+}
 .layout {
   display: grid;
-  grid-template-columns: 280px 1fr;
-  gap: 20px;
-  max-width: 1200px;
-  margin: 20px auto;
-  padding: 0 16px 24px;
+	grid-template-columns: 260px minmax(0, 1fr);
+	gap: 24px;
+	max-width: 1320px;
+	margin: 28px auto;
+	padding: 0 20px 28px;
 }
 nav {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 14px;
+	padding: 16px;
   height: fit-content;
 }
 nav a {
   display: block;
   text-decoration: none;
   color: var(--ink);
-  padding: 10px;
+	padding: 11px 12px;
   border-radius: 8px;
-  margin: 4px 0;
+	margin: 6px 0;
+	font-weight: 600;
 }
 nav a:hover, nav a.active {
   background: #eaf3ff;
@@ -241,15 +295,52 @@ main {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 22px;
+	padding: 30px;
+	font-size: 1.03rem;
 }
+h1, h2, h3, h4 {
+	line-height: 1.25;
+	margin-bottom: 0.6em;
+}
+h2 { margin-top: 0; font-size: 1.9rem; }
+h3 { margin-top: 30px; font-size: 1.5rem; }
+p, li { line-height: 1.7; }
+main ul, main ol { padding-left: 1.35rem; }
+main > *:first-child { margin-top: 0; }
 pre {
   background: #0f172a;
   color: #e2e8f0;
   border-radius: 10px;
-  padding: 12px;
+	padding: 16px;
   overflow-x: auto;
+	font-size: 14px;
+	line-height: 1.55;
 }
+.copy-wrap {
+	position: relative;
+	margin: 14px 0;
+}
+.copy-wrap pre,
+.copy-wrap .code {
+	margin: 0;
+}
+.copy-btn {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	border: 1px solid #3b82f6;
+	background: #eff6ff;
+	color: #0b4ea2;
+	border-radius: 8px;
+	font-size: 12px;
+	font-weight: 700;
+	padding: 6px 10px;
+	cursor: pointer;
+}
+.copy-btn:hover {
+	background: #dbeafe;
+}
+code { font-family: Consolas, "Courier New", monospace; }
 table {
   width: 100%;
   border-collapse: collapse;
@@ -260,7 +351,12 @@ th, td {
   text-align: left;
 }
 @media (max-width: 940px) {
-  .layout { grid-template-columns: 1fr; }
+	.layout {
+		grid-template-columns: 1fr;
+		gap: 14px;
+		margin-top: 14px;
+	}
+	main { padding: 20px; }
 }
 `
 	if err := os.WriteFile(cssPath, []byte(css), 0o644); err != nil {

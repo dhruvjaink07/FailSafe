@@ -24,6 +24,13 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 
+  docs:
+    build: .
+    container_name: failsafe-docs
+    command: ["sh", "-c", "go run ./cmd/docs serve -port 8090"]
+    ports:
+      - "8090:8090"
+
   svc-a:
     image: nginx
     container_name: svc-a

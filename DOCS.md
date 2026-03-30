@@ -39,6 +39,13 @@ docs/api/
 
 ## Build And Serve Pipeline
 
+Quick launch commands:
+
+```powershell
+go run cmd/controller/main.go
+powershell -ExecutionPolicy Bypass -File .\scripts\serve-docs.ps1 -Port 8090
+```
+
 Generate HTML pages from API markdown sources:
 
 ```powershell

@@ -125,5 +125,53 @@
   <footer>
     Generated from docs/api markdown. API behavior only.
   </footer>
+
+	<script>
+		(function () {
+			function fallbackCopy(text) {
+				var ta = document.createElement('textarea');
+				ta.value = text;
+				ta.setAttribute('readonly', '');
+				ta.style.position = 'absolute';
+				ta.style.left = '-9999px';
+				document.body.appendChild(ta);
+				ta.select();
+				document.execCommand('copy');
+				document.body.removeChild(ta);
+			}
+
+			function copyText(text) {
+				if (navigator.clipboard && window.isSecureContext) {
+					return navigator.clipboard.writeText(text);
+				}
+				return new Promise(function (resolve) {
+					fallbackCopy(text);
+					resolve();
+				});
+			}
+
+			var blocks = document.querySelectorAll('pre, .code');
+			blocks.forEach(function (block) {
+				var wrap = document.createElement('div');
+				wrap.className = 'copy-wrap';
+				block.parentNode.insertBefore(wrap, block);
+				wrap.appendChild(block);
+
+				var btn = document.createElement('button');
+				btn.className = 'copy-btn';
+				btn.type = 'button';
+				btn.textContent = 'Copy';
+				btn.addEventListener('click', function () {
+					var text = block.innerText || block.textContent || '';
+					copyText(text).then(function () {
+						var old = btn.textContent;
+						btn.textContent = 'Copied';
+						setTimeout(function () { btn.textContent = old; }, 1200);
+					});
+				});
+				wrap.appendChild(btn);
+			});
+		})();
+	</script>
 </body>
 </html>

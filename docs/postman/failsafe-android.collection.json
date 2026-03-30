@@ -1,0 +1,153 @@
+{
+  "info": {
+    "name": "FailSafe - Android",
+    "_postman_id": "a6df11c4-646e-4d2e-979f-67ca9b76efd4",
+    "description": "Android resilience workflow for FailSafe",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/health"
+      }
+    },
+    {
+      "name": "Upload APK",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": ""
+            }
+          ]
+        },
+        "url": "{{baseUrl}}/upload/apk"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const data = pm.response.json();",
+              "if (data.apk) pm.environment.set(\"apkId\", data.apk);",
+              "else if (data.id) pm.environment.set(\"apkId\", data.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Start Experiment - Android Kill Relaunch",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"fault_type\": \"kill_app\",\n  \"targets\": [\"com.example.code\"],\n  \"target_type\": \"android\",\n  \"observation_type\": \"android\",\n  \"duration_seconds\": 70,\n  \"apk\": \"{{apkId}}\",\n  \"android_run\": {\n    \"avd_name\": \"Pixel_8a\",\n    \"headless\": true,\n    \"reset_app_state\": true\n  },\n  \"scenarios\": [\n    { \"type\": \"kill_app\", \"at\": 20, \"duration_seconds\": 1 },\n    { \"type\": \"foreground_app\", \"at\": 30, \"duration_seconds\": 2 }\n  ],\n  \"expected\": {\n    \"running\": true,\n    \"not_crash\": true,\n    \"not_anr\": true,\n    \"should_recover\": true\n  }\n}"
+        },
+        "url": "{{baseUrl}}/experiment/start"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const data = pm.response.json();",
+              "if (data.id) pm.environment.set(\"experimentId\", data.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Start Experiment - Android Network",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"fault_type\": \"network_disable\",\n  \"targets\": [\"com.example.code\"],\n  \"target_type\": \"android\",\n  \"observation_type\": \"android\",\n  \"duration_seconds\": 85,\n  \"apk\": \"{{apkId}}\",\n  \"android_run\": {\n    \"avd_name\": \"Pixel_8a\",\n    \"headless\": true\n  },\n  \"scenarios\": [\n    { \"type\": \"network_disable\", \"at\": 8, \"duration_seconds\": 7 },\n    { \"type\": \"network_enable\", \"at\": 18, \"duration_seconds\": 1 },\n    { \"type\": \"network_flaky\", \"at\": 28, \"duration_seconds\": 10 },\n    { \"type\": \"network_latency\", \"at\": 44, \"duration_seconds\": 8 }\n  ],\n  \"expected\": {\n    \"running\": true,\n    \"not_crash\": true,\n    \"not_anr\": true,\n    \"should_recover\": true\n  }\n}"
+        },
+        "url": "{{baseUrl}}/experiment/start"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const data = pm.response.json();",
+              "if (data.id) pm.environment.set(\"experimentId\", data.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Android Status",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/experiment/android/status?id={{experimentId}}"
+      }
+    },
+    {
+      "name": "Get Experiment",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/experiment/get?id={{experimentId}}"
+      }
+    },
+    {
+      "name": "Get Metrics",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/experiment/metrics?id={{experimentId}}"
+      }
+    },
+    {
+      "name": "Stop Experiment",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{baseUrl}}/experiment/stop?id={{experimentId}}"
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "apkId",
+      "value": ""
+    },
+    {
+      "key": "experimentId",
+      "value": ""
+    }
+  ]
+}

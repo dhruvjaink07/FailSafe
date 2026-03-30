@@ -1,0 +1,110 @@
+{
+  "info": {
+    "name": "FailSafe - Docker Backend",
+    "_postman_id": "e9b80df0-66fd-46a6-8798-a4cf69adf0e1",
+    "description": "Docker/backend resilience workflow for FailSafe",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/health"
+      }
+    },
+    {
+      "name": "Start Experiment - Docker Network Delay",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"faultType\": \"network_delay\",\n  \"targets\": [\"svc-c\"],\n  \"targetType\": \"docker\",\n  \"observationType\": \"http\",\n  \"observedEndpoints\": [\n    \"http://svc-a\",\n    \"http://svc-b\",\n    \"http://svc-c\"\n  ],\n  \"duration\": 60,\n  \"adaptive\": true,\n  \"stepIntensity\": 20,\n  \"maxIntensity\": 100,\n  \"dependencyGraph\": {\n    \"http://svc-a\": [\"http://svc-b\"],\n    \"http://svc-b\": [\"http://svc-c\"],\n    \"http://svc-c\": []\n  },\n  \"targetEndpointMap\": {\n    \"svc-a\": [\"http://svc-a\"],\n    \"svc-b\": [\"http://svc-b\"],\n    \"svc-c\": [\"http://svc-c\"]\n  }\n}"
+        },
+        "url": "{{baseUrl}}/experiment/start"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const data = pm.response.json();",
+              "if (data.id) pm.environment.set(\"experimentId\", data.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Start Experiment - Docker Kill CPU Memory",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"fault_type\": \"kill\",\n  \"targets\": [\"svc-c\"],\n  \"target_type\": \"docker\",\n  \"observation_type\": \"http\",\n  \"observed_endpoints\": [\"http://svc-a\", \"http://svc-b\", \"http://svc-c\"],\n  \"duration_seconds\": 75,\n  \"scenarios\": [\n    { \"type\": \"kill\", \"at\": 8, \"duration_seconds\": 1 },\n    { \"type\": \"cpu_stress\", \"at\": 20, \"duration_seconds\": 25 },\n    { \"type\": \"memory_stress\", \"at\": 50, \"duration_seconds\": 15 }\n  ],\n  \"expected\": {\n    \"running\": true\n  }\n}"
+        },
+        "url": "{{baseUrl}}/experiment/start"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const data = pm.response.json();",
+              "if (data.id) pm.environment.set(\"experimentId\", data.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get Experiment",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/experiment/get?id={{experimentId}}"
+      }
+    },
+    {
+      "name": "Get Metrics",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/experiment/metrics?id={{experimentId}}"
+      }
+    },
+    {
+      "name": "Stop Experiment",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{baseUrl}}/experiment/stop?id={{experimentId}}"
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "experimentId",
+      "value": ""
+    }
+  ]
+}

@@ -48,13 +48,18 @@ Form-data fields:
 }
 ```
 
-## 3) Start Experiment
+## 3) Start Experiment (Shared Endpoint)
 
 ### Request
 
 ```http
 POST /experiment/start
 ```
+
+This is one endpoint with two request modes:
+
+- Docker mode: backend service/container resilience tests.
+- Android mode: APK/app resilience tests.
 
 ### Payload
 
@@ -106,6 +111,21 @@ The `expected` and `scenario` object fields are strict and should be sent in sna
 - `fault_type`: required.
 - `targets`: required and non-empty.
 - `duration_seconds` (or `duration`): required and must be greater than 0.
+
+### Mode-Specific Required Fields
+
+Docker mode:
+
+- `target_type`: `docker`
+- `observation_type`: `http`
+- `targets`: Docker service/container names
+
+Android mode:
+
+- `target_type`: `android`
+- `observation_type`: `android`
+- `targets`: app package target(s)
+- `apk` (or alias): uploaded APK id
 
 ### Accepted Top-Level Alias Keys
 
@@ -171,6 +191,128 @@ Returns experiment object with id, state, phase, and metadata.
 ### Backend Testing Request Bodies
 
 Use these payloads directly for integration tests against `POST /experiment/start`.
+
+### Embedded From Existing Collection (Docker)
+
+The body below is the legacy payload format you shared:
+
+```json
+{
+  "faultType": "network_delay",
+  "targetContainers": ["svc-c"],
+  "observedEndpoints": [
+    "http://svc-a",
+    "http://svc-b",
+    "http://svc-c"
+  ],
+  "duration": 60,
+  "adaptive": true,
+  "stepIntensity": 20,
+  "maxIntensity": 100,
+  "dependencyGraph": {
+    "http://svc-a": ["http://svc-b"],
+    "http://svc-b": ["http://svc-c"],
+    "http://svc-c": []
+  },
+  "containerEndpointMap": {
+    "svc-a": ["http://svc-a"],
+    "svc-b": ["http://svc-b"],
+    "svc-c": ["http://svc-c"]
+  }
+}
+```
+
+Why this can fail:
+
+- `targetContainers` is not a recognized key.
+- `containerEndpointMap` is not a recognized key.
+
+Corrected equivalent payload:
+
+```json
+{
+  "faultType": "network_delay",
+  "targets": ["svc-c"],
+  "targetType": "docker",
+  "observationType": "http",
+  "observedEndpoints": [
+    "http://svc-a",
+    "http://svc-b",
+    "http://svc-c"
+  ],
+  "duration": 60,
+  "adaptive": true,
+  "stepIntensity": 20,
+  "maxIntensity": 100,
+  "dependencyGraph": {
+    "http://svc-a": ["http://svc-b"],
+    "http://svc-b": ["http://svc-c"],
+    "http://svc-c": []
+  },
+  "targetEndpointMap": {
+    "svc-a": ["http://svc-a"],
+    "svc-b": ["http://svc-b"],
+    "svc-c": ["http://svc-c"]
+  }
+}
+```
+
+### Embedded From Existing Collection (Android)
+
+The Android request body you shared is valid with current API contract:
+
+```json
+{
+  "fault_type": "kill_app",
+  "targets": ["com.example.code"],
+  "target_type": "android",
+  "observation_type": "android",
+  "duration_seconds": 70,
+  "apk": "3f99e4f9-1e61-442e-a587-257ed0549261",
+  "android_run": {
+    "avd_name": "Pixel_8a",
+    "headless": true
+  },
+  "scenarios": [
+    { "type": "network_disable", "at": 10, "duration_seconds": 6 },
+    { "type": "network_enable", "at": 18, "duration_seconds": 1 },
+    { "type": "kill_app", "at": 30, "duration_seconds": 1 },
+    { "type": "foreground_app", "at": 40, "duration_seconds": 2 }
+  ],
+  "expected": {
+    "running": true,
+    "not_crash": true,
+    "not_anr": true,
+    "should_recover": true
+  }
+}
+```
+
+### Fault Options You Can Test
+
+Docker/backend fault types:
+
+- `network_delay`
+- `packet_loss`
+- `cpu_stress`
+- `memory_stress`
+- `kill`
+
+Android fault types:
+
+- `kill_app`
+- `kill_repeated`
+- `network_disable`
+- `network_enable`
+- `network_flaky`
+- `network_latency`
+- `network_packet_loss`
+- `revoke_camera`
+- `revoke_storage`
+- `revoke_location`
+- `background_app`
+- `foreground_app`
+- `clear_data`
 
 #### A) Android app kill and recovery validation
 

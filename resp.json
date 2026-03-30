@@ -1,0 +1,133 @@
+{
+    "blast_radius_percent": 0,
+    "cascade_depth": 0,
+    "crash_classification": {
+        "lifecycle_bug": 1,
+        "network_bug": 0,
+        "ui_bug": 0,
+        "unknown": 0
+    },
+    "health": {
+        "crash_reason": "Process not running after fault: network_disable",
+        "failure_type": "killed",
+        "severity": "critical",
+        "status": "degraded",
+        "thread": ""
+    },
+    "recovery": {
+        "auto_recovered": false,
+        "manual_intervention_required": true,
+        "recovered": true,
+        "recovery_time_ms": 30195,
+        "running": false,
+        "stable_recovered": false
+    },
+    "replay_hints": [
+        {
+            "at_ms": 10154,
+            "at_time": "2026-03-30T15:15:00.0387544+05:30",
+            "fault": "network_disable",
+            "step": "inject_fault"
+        },
+        {
+            "at_ms": 10606,
+            "at_time": "2026-03-30T15:15:00.4915098+05:30",
+            "from": "running",
+            "step": "state_transition",
+            "to": "not_running"
+        },
+        {
+            "at_ms": 18282,
+            "at_time": "2026-03-30T15:15:08.167595+05:30",
+            "fault": "network_enable",
+            "step": "inject_fault"
+        },
+        {
+            "at_ms": 30134,
+            "at_time": "2026-03-30T15:15:20.0187594+05:30",
+            "fault": "kill_app",
+            "step": "inject_fault"
+        },
+        {
+            "at_ms": 40802,
+            "at_time": "2026-03-30T15:15:30.6868698+05:30",
+            "from": "not_running",
+            "step": "state_transition",
+            "to": "running"
+        },
+        {
+            "at_ms": 40973,
+            "at_time": "2026-03-30T15:15:30.8579052+05:30",
+            "fault": "foreground_app",
+            "step": "inject_fault"
+        },
+        {
+            "at_ms": 42586,
+            "at_time": "2026-03-30T15:15:32.4708769+05:30",
+            "from": "running",
+            "step": "state_transition",
+            "to": "not_running"
+        }
+    ],
+    "resilience_threshold": {
+        "breaking_intensity": 0,
+        "intensity_steps": [],
+        "max_stable_intensity": 0
+    },
+    "scenario": "process_kill_recovery",
+    "stability": {
+        "anr_detected": false,
+        "background_samples": 0,
+        "crash_rate_percent": 0,
+        "unexpected_restarts": 1,
+        "uptime_percent": 32,
+        "warning_signals": 0
+    },
+    "state_transitions": [
+        {
+            "at": "2026-03-30T15:15:00.4915098+05:30",
+            "from": "running",
+            "to": "not_running"
+        },
+        {
+            "at": "2026-03-30T15:15:30.6868698+05:30",
+            "from": "not_running",
+            "to": "running"
+        },
+        {
+            "at": "2026-03-30T15:15:32.4708769+05:30",
+            "from": "running",
+            "to": "not_running"
+        }
+    ],
+    "summary": {
+        "reason": "App recovered only after external trigger (likely cause: network_disable)",
+        "result": "FAIL",
+        "suggestion": "Handle process death and restore app state on launch"
+    },
+    "target_type": "android",
+    "timeline": {
+        "fault_start": "2026-03-30T15:14:49.8846549+05:30",
+        "first_impact": {
+            "com.example.code": "2026-03-30T15:15:00.4915098+05:30"
+        },
+        "recovery": {
+            "com.example.code": "2026-03-30T15:15:30.6868698+05:30"
+        }
+    },
+    "validation": {
+        "configured": true,
+        "expected": {
+            "app_state": "",
+            "not_anr": true,
+            "not_crash": true,
+            "running": true,
+            "should_recover": true
+        },
+        "passed": false,
+        "reasons": [
+            "running state does not match expectation",
+            "app recovered but required external interaction"
+        ]
+    }
+}

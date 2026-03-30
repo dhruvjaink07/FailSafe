@@ -13,6 +13,7 @@
 body {
   margin: 0;
   font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  font-size: 17px;
   background: linear-gradient(180deg, #f7fafc, #f2f6fc 55%, #eef3fb);
   color: var(--ink);
 }
@@ -25,7 +26,7 @@ header {
 
 header h1 {
   margin: 0 0 8px;
-  font-size: 30px;
+  font-size: 36px;
 }
 
 header p {
@@ -35,25 +36,23 @@ header p {
 
 .layout {
   display: grid;
-  grid-template-columns: 280px 1fr;
-  gap: 20px;
-  max-width: 1200px;
-  margin: 20px auto;
-  padding: 0 16px 24px;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 24px;
+  max-width: 1320px;
+  margin: 28px auto;
+  padding: 0 20px 28px;
 }
 
 nav {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 14px;
+  padding: 16px;
   height: fit-content;
-  position: sticky;
-  top: 16px;
 }
 
 nav h2 {
-  font-size: 15px;
+  font-size: 14px;
   margin: 0 0 12px;
   color: var(--muted);
   text-transform: uppercase;
@@ -64,9 +63,10 @@ nav a {
   display: block;
   text-decoration: none;
   color: var(--ink);
-  padding: 10px 10px;
+  padding: 11px 12px;
   border-radius: 8px;
-  margin: 4px 0;
+  margin: 6px 0;
+  font-weight: 600;
 }
 
 nav a:hover, nav a.active {
@@ -78,12 +78,29 @@ main {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 22px;
+  padding: 30px;
+  font-size: 1.03rem;
 }
 
-h2 { margin-top: 0; }
-h3 { margin-top: 26px; }
-p, li { line-height: 1.55; }
+h1, h2, h3, h4 {
+  line-height: 1.25;
+  margin-bottom: 0.6em;
+}
+
+h2 { margin-top: 0; font-size: 1.9rem; }
+h3 { margin-top: 30px; font-size: 1.5rem; }
+
+p, li {
+  line-height: 1.7;
+}
+
+main ul, main ol {
+  padding-left: 1.35rem;
+}
+
+main > *:first-child {
+  margin-top: 0;
+}
 
 .card {
   border: 1px solid var(--line);
@@ -110,11 +127,53 @@ p, li { line-height: 1.55; }
   background: #0f172a;
   color: #e2e8f0;
   border-radius: 10px;
-  padding: 12px;
+  padding: 14px;
   overflow-x: auto;
   font-family: Consolas, "Courier New", monospace;
-  font-size: 13px;
+  font-size: 14px;
   white-space: pre;
+}
+
+.copy-wrap {
+  position: relative;
+  margin: 14px 0;
+}
+
+.copy-wrap pre,
+.copy-wrap .code {
+  margin: 0;
+}
+
+.copy-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  border: 1px solid #3b82f6;
+  background: #eff6ff;
+  color: #0b4ea2;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.copy-btn:hover {
+  background: #dbeafe;
+}
+
+pre {
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 10px;
+  padding: 16px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+code {
+  font-family: Consolas, "Courier New", monospace;
 }
 
 .badge {
@@ -133,18 +192,20 @@ p, li { line-height: 1.55; }
 }
 
 footer {
-  max-width: 1200px;
+  max-width: 1320px;
   margin: 0 auto 26px;
   color: var(--muted);
-  padding: 0 16px;
+  padding: 0 20px;
 }
 
 @media (max-width: 940px) {
   .layout {
     grid-template-columns: 1fr;
+    gap: 14px;
+    margin-top: 14px;
   }
 
-  nav {
-    position: static;
+  main {
+    padding: 20px;
   }
 }
