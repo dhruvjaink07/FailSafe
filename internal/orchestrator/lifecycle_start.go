@@ -104,6 +104,8 @@ func (o *Orchestrator) StartExperiment(
 	o.monitors[id] = monitor
 	o.mu.Unlock()
 
+	// Set phase to injecting before starting monitor to ensure firstImpact is recorded
+	o.setPhase(id, models.PhaseInjecting)
 	monitor.Start(id, observedEndpoints)
 	o.startMetricsFlusher(id)
 	go o.runTimeline(id)

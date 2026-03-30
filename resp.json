@@ -2,17 +2,17 @@
     "blast_radius_percent": 0,
     "cascade_depth": 0,
     "endpoints": {
-        "http://svc-a": {
+        "http://api-gateway:8080/api/orders/100": {
             "container": {
-                "avg_cpu_percent": 1.0810000000000002,
-                "avg_memory_mb": 14.749,
-                "max_cpu_percent": 3.75,
-                "max_memory_mb": 16.05
+                "avg_cpu_percent": 6.037857142857145,
+                "avg_memory_mb": 70.9771428571429,
+                "max_cpu_percent": 88.36,
+                "max_memory_mb": 180
             },
             "degraded": false,
             "derived": {
                 "error_delta": 0,
-                "latency_ratio": 1
+                "latency_ratio": 0.7894736842105263
             },
             "errors": {
                 "max_failure_streak": 0,
@@ -21,27 +21,27 @@
             },
             "impact_order": 0,
             "latency": {
-                "avg_ms": 0,
-                "jitter_ms": 0.1111111111111111,
-                "p50_ms": 0,
-                "p95_ms": 1,
-                "p99_ms": 1,
-                "stddev_ms": 0.7071067811865475
+                "avg_ms": 13,
+                "jitter_ms": 0.3170731707317073,
+                "p50_ms": 13,
+                "p95_ms": 15,
+                "p99_ms": 25,
+                "stddev_ms": 2.9113897843110044
             },
-            "requests_total": 10,
+            "requests_total": 42,
             "stability_score": 100
         },
-        "http://svc-b": {
+        "http://api-gateway:8080/api/users/1": {
             "container": {
-                "avg_cpu_percent": 1.0810000000000002,
-                "avg_memory_mb": 14.749,
-                "max_cpu_percent": 3.75,
-                "max_memory_mb": 16.05
+                "avg_cpu_percent": 6.184634146341466,
+                "avg_memory_mb": 72.07804878048782,
+                "max_cpu_percent": 88.36,
+                "max_memory_mb": 180
             },
             "degraded": false,
             "derived": {
                 "error_delta": 0,
-                "latency_ratio": 1
+                "latency_ratio": 0.631578947368421
             },
             "errors": {
                 "max_failure_streak": 0,
@@ -50,27 +50,27 @@
             },
             "impact_order": 0,
             "latency": {
-                "avg_ms": 0,
-                "jitter_ms": 0.1111111111111111,
-                "p50_ms": 0,
-                "p95_ms": 1,
-                "p99_ms": 1,
-                "stddev_ms": 0.4472135954999579
+                "avg_ms": 8,
+                "jitter_ms": 0.3,
+                "p50_ms": 8,
+                "p95_ms": 12,
+                "p99_ms": 12,
+                "stddev_ms": 2.0894625286270596
             },
-            "requests_total": 10,
+            "requests_total": 41,
             "stability_score": 100
         },
-        "http://svc-c": {
+        "http://inventory-service:8084/inventory/A1": {
             "container": {
-                "avg_cpu_percent": 1.0810000000000002,
-                "avg_memory_mb": 14.749,
-                "max_cpu_percent": 3.75,
-                "max_memory_mb": 16.05
+                "avg_cpu_percent": 6.184634146341466,
+                "avg_memory_mb": 72.07804878048782,
+                "max_cpu_percent": 88.36,
+                "max_memory_mb": 180
             },
             "degraded": false,
             "derived": {
                 "error_delta": 0,
-                "latency_ratio": 0
+                "latency_ratio": 0.05263157894736842
             },
             "errors": {
                 "max_failure_streak": 0,
@@ -79,14 +79,188 @@
             },
             "impact_order": 0,
             "latency": {
-                "avg_ms": 0,
-                "jitter_ms": 0.1111111111111111,
-                "p50_ms": 0,
-                "p95_ms": 0,
-                "p99_ms": 0,
-                "stddev_ms": 0.31622776601683794
+                "avg_ms": 1,
+                "jitter_ms": 0.025,
+                "p50_ms": 1,
+                "p95_ms": 1,
+                "p99_ms": 1,
+                "stddev_ms": 0.15617376188860607
             },
-            "requests_total": 10,
+            "requests_total": 41,
+            "stability_score": 100
+        },
+        "http://notification-service:8086/notifications/100": {
+            "container": {
+                "avg_cpu_percent": 6.184634146341466,
+                "avg_memory_mb": 72.07804878048782,
+                "max_cpu_percent": 88.36,
+                "max_memory_mb": 180
+            },
+            "degraded": false,
+            "derived": {
+                "error_delta": 0,
+                "latency_ratio": 0.05263157894736842
+            },
+            "errors": {
+                "max_failure_streak": 0,
+                "rate_percent": 0,
+                "total": 0
+            },
+            "impact_order": 0,
+            "latency": {
+                "avg_ms": 1,
+                "jitter_ms": 0.025,
+                "p50_ms": 1,
+                "p95_ms": 1,
+                "p99_ms": 1,
+                "stddev_ms": 0.15617376188860607
+            },
+            "requests_total": 41,
+            "stability_score": 100
+        },
+        "http://order-service:8082/orders/100": {
+            "container": {
+                "avg_cpu_percent": 6.184634146341466,
+                "avg_memory_mb": 72.07804878048782,
+                "max_cpu_percent": 88.36,
+                "max_memory_mb": 180
+            },
+            "degraded": false,
+            "derived": {
+                "error_delta": 0,
+                "latency_ratio": 0.5789473684210527
+            },
+            "errors": {
+                "max_failure_streak": 0,
+                "rate_percent": 0,
+                "total": 0
+            },
+            "impact_order": 0,
+            "latency": {
+                "avg_ms": 10,
+                "jitter_ms": 0.1,
+                "p50_ms": 10,
+                "p95_ms": 11,
+                "p99_ms": 12,
+                "stddev_ms": 0.8553989227683015
+            },
+            "requests_total": 41,
+            "stability_score": 100
+        },
+        "http://payment-service:8083/payments/100": {
+            "container": {
+                "avg_cpu_percent": 6.184634146341466,
+                "avg_memory_mb": 72.07804878048782,
+                "max_cpu_percent": 88.36,
+                "max_memory_mb": 180
+            },
+            "degraded": false,
+            "derived": {
+                "error_delta": 0,
+                "latency_ratio": 0.05263157894736842
+            },
+            "errors": {
+                "max_failure_streak": 0,
+                "rate_percent": 0,
+                "total": 0
+            },
+            "impact_order": 0,
+            "latency": {
+                "avg_ms": 1,
+                "jitter_ms": 0.025,
+                "p50_ms": 1,
+                "p95_ms": 1,
+                "p99_ms": 1,
+                "stddev_ms": 0.15617376188860607
+            },
+            "requests_total": 41,
+            "stability_score": 100
+        },
+        "http://recommendation-service:8087/recommendations/1": {
+            "container": {
+                "avg_cpu_percent": 6.184634146341466,
+                "avg_memory_mb": 72.07804878048782,
+                "max_cpu_percent": 88.36,
+                "max_memory_mb": 180
+            },
+            "degraded": false,
+            "derived": {
+                "error_delta": 0,
+                "latency_ratio": 0.21052631578947367
+            },
+            "errors": {
+                "max_failure_streak": 0,
+                "rate_percent": 0,
+                "total": 0
+            },
+            "impact_order": 0,
+            "latency": {
+                "avg_ms": 3,
+                "jitter_ms": 0.05,
+                "p50_ms": 3,
+                "p95_ms": 4,
+                "p99_ms": 4,
+                "stddev_ms": 0.4417261042993862
+            },
+            "requests_total": 41,
+            "stability_score": 100
+        },
+        "http://shipping-service:8085/shipping/100": {
+            "container": {
+                "avg_cpu_percent": 6.184634146341466,
+                "avg_memory_mb": 72.07804878048782,
+                "max_cpu_percent": 88.36,
+                "max_memory_mb": 180
+            },
+            "degraded": false,
+            "derived": {
+                "error_delta": 0,
+                "latency_ratio": 0.21052631578947367
+            },
+            "errors": {
+                "max_failure_streak": 0,
+                "rate_percent": 0,
+                "total": 0
+            },
+            "impact_order": 0,
+            "latency": {
+                "avg_ms": 3,
+                "jitter_ms": 0.1,
+                "p50_ms": 3,
+                "p95_ms": 4,
+                "p99_ms": 4,
+                "stddev_ms": 0.7808688094430303
+            },
+            "requests_total": 41,
+            "stability_score": 100
+        },
+        "http://user-service:8081/users/1": {
+            "container": {
+                "avg_cpu_percent": 6.184634146341466,
+                "avg_memory_mb": 72.07804878048782,
+                "max_cpu_percent": 88.36,
+                "max_memory_mb": 180
+            },
+            "degraded": false,
+            "derived": {
+                "error_delta": 0,
+                "latency_ratio": 0.3157894736842105
+            },
+            "errors": {
+                "max_failure_streak": 0,
+                "rate_percent": 0,
+                "total": 0
+            },
+            "impact_order": 0,
+            "latency": {
+                "avg_ms": 5,
+                "jitter_ms": 0.05,
+                "p50_ms": 6,
+                "p95_ms": 6,
+                "p99_ms": 7,
+                "stddev_ms": 0.9753048303966929
+            },
+            "requests_total": 41,
             "stability_score": 100
         }
     },
@@ -94,16 +268,21 @@
         "breaking_intensity": 0,
         "intensity_steps": [
             50,
-            75
+            75,
+            88,
+            94,
+            97,
+            99,
+            100
         ],
-        "max_stable_intensity": 0
+        "max_stable_intensity": 100
     },
     "system_severity": "isolated",
     "timeline": {
-        "fault_start": "2026-03-30T15:44:41.524316578Z",
+        "fault_start": "2026-03-30T17:56:26.219244438Z",
         "first_impact": {},
         "recovery": {}
     },
-    "total_endpoints": 3,
-    "total_requests": 30
+    "total_endpoints": 9,
+    "total_requests": 370
 }

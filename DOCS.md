@@ -59,3 +59,5 @@ powershell -ExecutionPolicy Bypass -File .\scripts\serve-docs.ps1 -Port 8090
 ```
 
 The build script verifies API-only output and fails if architecture-oriented content appears in generated site pages.
+
+docker-compose -f docker-compose.test.yml up --build

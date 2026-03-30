@@ -31,14 +31,3 @@ services:
     ports:
       - "8090:8090"
 
-  svc-a:
-    image: nginx
-    container_name: svc-a
-
-  svc-b:
-    image: nginx
-    container_name: svc-b
-
-  svc-c:
-    image: nginx
-    container_name: svc-c

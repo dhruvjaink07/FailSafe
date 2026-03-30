@@ -12,7 +12,7 @@ func (o *Orchestrator) createCallback(id string) monitoring.EventCallback {
 		o.mu.Lock()
 		defer o.mu.Unlock()
 
-		exp, ok := o.experiments[id]
+		_, ok := o.experiments[id]
 		if !ok {
 			return
 		}
@@ -29,6 +29,7 @@ func (o *Orchestrator) createCallback(id string) monitoring.EventCallback {
 			now = time.Now()
 		}
 
+		// Always record firstImpact for first error, degraded, or down event
 		if sample.AppState == "not_running" || sample.Crash || sample.ANR {
 			if _, exists := o.firstImpact[id][sample.Endpoint]; !exists {
 				o.firstImpact[id][sample.Endpoint] = now
@@ -40,19 +41,17 @@ func (o *Orchestrator) createCallback(id string) monitoring.EventCallback {
 			if _, exists := o.downtime[id]; !exists {
 				o.downtime[id] = now
 			}
-			if exp.Phase == models.PhaseInjecting {
-				if _, exists := o.firstImpact[id][sample.Endpoint]; !exists {
-					o.firstImpact[id][sample.Endpoint] = now
-				}
+			if _, exists := o.firstImpact[id][sample.Endpoint]; !exists {
+				o.firstImpact[id][sample.Endpoint] = now
 			}
 		case monitoring.EventDegraded:
-			if exp.Phase == models.PhaseInjecting {
-				if _, exists := o.firstImpact[id][sample.Endpoint]; !exists {
-					o.firstImpact[id][sample.Endpoint] = now
-				}
+			if _, exists := o.firstImpact[id][sample.Endpoint]; !exists {
+				o.firstImpact[id][sample.Endpoint] = now
 			}
 		case monitoring.EventRecovered:
-			o.recoveryAt[id][sample.Endpoint] = now
+			if _, exists := o.recoveryAt[id][sample.Endpoint]; !exists {
+				o.recoveryAt[id][sample.Endpoint] = now
+			}
 			if downAt, exists := o.downtime[id]; exists {
 				dur := now.Sub(downAt)
 				o.totalDown[id] += dur

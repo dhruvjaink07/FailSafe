@@ -1,5 +1,6 @@
 services:
   api-gateway:
+    container_name: api-gateway
     build:
       context: ./test/mock-services/api-gateway
     ports:
@@ -10,6 +11,7 @@ services:
       - ORDER_SERVICE_URL=http://order-service:8082
 
   user-service:
+    container_name: user-service
     build:
       context: ./test/mock-services/user-service
     ports:
@@ -19,6 +21,7 @@ services:
       - RECOMMENDATION_SERVICE_URL=http://recommendation-service:8087
 
   order-service:
+    container_name: order-service
     build:
       context: ./test/mock-services/order-service
     ports:
@@ -30,6 +33,7 @@ services:
       - SHIPPING_SERVICE_URL=http://shipping-service:8085
 
   payment-service:
+    container_name: payment-service
     build:
       context: ./test/mock-services/payment-service
     ports:
@@ -38,6 +42,7 @@ services:
       - PORT=8083
 
   inventory-service:
+    container_name: inventory-service
     build:
       context: ./test/mock-services/inventory-service
     ports:
@@ -46,6 +51,7 @@ services:
       - PORT=8084
 
   shipping-service:
+    container_name: shipping-service
     build:
       context: ./test/mock-services/shipping-service
     ports:
@@ -55,6 +61,7 @@ services:
       - NOTIFICATION_SERVICE_URL=http://notification-service:8086
 
   notification-service:
+    container_name: notification-service
     build:
       context: ./test/mock-services/notification-service
     ports:
@@ -63,6 +70,7 @@ services:
       - PORT=8086
 
   recommendation-service:
+    container_name: recommendation-service
     build:
       context: ./test/mock-services/recommendation-service
     ports:

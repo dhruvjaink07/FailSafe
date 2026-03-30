@@ -141,7 +141,8 @@ func (o *Orchestrator) buildBackendMetrics(id string, exp *models.Experiment, en
 			stability = 100
 		}
 
-		degraded := latencyRatio > 1.5 || errorDelta > 5
+		// Mark as degraded if error rate is above 0% or latency ratio is high
+		degraded := errorRate > 0 || latencyRatio > 1.5
 		if degraded {
 			degradedMap[endpoint] = true
 		}

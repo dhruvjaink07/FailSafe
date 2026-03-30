@@ -166,9 +166,9 @@ func (m *Monitor) collect(experimentID string, endpoints []string) {
 		baseline := m.getBaselineP95(url)
 		threshold := int(float64(baseline) * 2.0)
 
-		// safeguard for low-latency systems (like nginx)
-		if threshold < 20 {
-			threshold = 20
+		// Lower safeguard for low-latency systems
+		if threshold < 5 {
+			threshold = 5
 		}
 
 		latencyDegraded := latency.Milliseconds() > int64(threshold)
