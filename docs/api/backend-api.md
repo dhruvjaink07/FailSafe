@@ -454,7 +454,7 @@ GET /experiment/get?id={experiment_id}
 
 Experiment metadata object (`state`, `phase`, timestamps, baseline fields, etc.).
 
-## 5) Get Metrics
+## 5) Get Metrics (Compatibility)
 
 ### Request
 
@@ -464,7 +464,9 @@ GET /experiment/metrics?id={experiment_id}
 
 ### Response
 
-For Android runs, response includes:
+Compatibility endpoint. It routes by experiment type internally.
+
+For Android experiments, response includes:
 
 - `health`
 - `recovery`
@@ -476,7 +478,42 @@ For Android runs, response includes:
 - `summary`
 - `scenario`
 
-## 6) Android Live Status
+For backend/docker experiments, response includes:
+
+- `endpoints`
+- `blast_radius_percent`
+- `cascade_depth`
+- `system_severity`
+- `resilience_threshold`
+- `timeline`
+
+## 6) Get Backend Metrics (Segregated)
+
+### Request
+
+```http
+GET /experiment/metrics/backend?id={experiment_id}
+```
+
+### Behavior
+
+- Returns only backend/docker metrics shape.
+- Returns `400` if experiment id belongs to Android run.
+
+## 7) Get Android Metrics (Segregated)
+
+### Request
+
+```http
+GET /experiment/metrics/android?id={experiment_id}
+```
+
+### Behavior
+
+- Returns only Android metrics shape.
+- Returns `400` if experiment id belongs to backend/docker run.
+
+## 8) Android Live Status
 
 ### Request
 
@@ -495,7 +532,7 @@ Lightweight polling payload containing:
 - `timeline`
 - recent transitions and fault events
 
-## 7) Stop Experiment
+## 9) Stop Experiment
 
 ### Request
 
@@ -509,7 +546,7 @@ POST /experiment/stop?id={experiment_id}
 experiment stopped
 ```
 
-## 8) Scenario Presets
+## 10) Scenario Presets
 
 ### Request
 

@@ -85,7 +85,7 @@
       "request": {
         "method": "GET",
         "header": [],
-        "url": "{{baseUrl}}/experiment/metrics?id={{experimentId}}"
+        "url": "{{baseUrl}}/experiment/metrics/backend?id={{experimentId}}"
       }
     },
     {

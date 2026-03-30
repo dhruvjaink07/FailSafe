@@ -415,12 +415,13 @@ The <code>expected</code> and <code>scenario</code> object fields are strict and
 </code></pre>
 <h3 id="response-3">Response</h3>
 <p>Experiment metadata object (<code>state</code>, <code>phase</code>, timestamps, baseline fields, etc.).</p>
-<h2 id="5-get-metrics">5) Get Metrics</h2>
+<h2 id="5-get-metrics-compatibility">5) Get Metrics (Compatibility)</h2>
 <h3 id="request-4">Request</h3>
 <pre><code class="language-http">GET /experiment/metrics?id={experiment_id}
 </code></pre>
 <h3 id="response-4">Response</h3>
-<p>For Android runs, response includes:</p>
+<p>Compatibility endpoint. It routes by experiment type internally.</p>
+<p>For Android experiments, response includes:</p>
 <ul>
 <li><code>health</code></li>
 <li><code>recovery</code></li>
@@ -432,8 +433,35 @@ The <code>expected</code> and <code>scenario</code> object fields are strict and
 <li><code>summary</code></li>
 <li><code>scenario</code></li>
 </ul>
-<h2 id="6-android-live-status">6) Android Live Status</h2>
+<p>For backend/docker experiments, response includes:</p>
+<ul>
+<li><code>endpoints</code></li>
+<li><code>blast_radius_percent</code></li>
+<li><code>cascade_depth</code></li>
+<li><code>system_severity</code></li>
+<li><code>resilience_threshold</code></li>
+<li><code>timeline</code></li>
+</ul>
+<h2 id="6-get-backend-metrics-segregated">6) Get Backend Metrics (Segregated)</h2>
 <h3 id="request-5">Request</h3>
+<pre><code class="language-http">GET /experiment/metrics/backend?id={experiment_id}
+</code></pre>
+<h3 id="behavior">Behavior</h3>
+<ul>
+<li>Returns only backend/docker metrics shape.</li>
+<li>Returns <code>400</code> if experiment id belongs to Android run.</li>
+</ul>
+<h2 id="7-get-android-metrics-segregated">7) Get Android Metrics (Segregated)</h2>
+<h3 id="request-6">Request</h3>
+<pre><code class="language-http">GET /experiment/metrics/android?id={experiment_id}
+</code></pre>
+<h3 id="behavior-1">Behavior</h3>
+<ul>
+<li>Returns only Android metrics shape.</li>
+<li>Returns <code>400</code> if experiment id belongs to backend/docker run.</li>
+</ul>
+<h2 id="8-android-live-status">8) Android Live Status</h2>
+<h3 id="request-7">Request</h3>
 <pre><code class="language-http">GET /experiment/android/status?id={experiment_id}
 </code></pre>
 <h3 id="response-5">Response</h3>
@@ -446,15 +474,15 @@ The <code>expected</code> and <code>scenario</code> object fields are strict and
 <li><code>timeline</code></li>
 <li>recent transitions and fault events</li>
 </ul>
-<h2 id="7-stop-experiment">7) Stop Experiment</h2>
-<h3 id="request-6">Request</h3>
+<h2 id="9-stop-experiment">9) Stop Experiment</h2>
+<h3 id="request-8">Request</h3>
 <pre><code class="language-http">POST /experiment/stop?id={experiment_id}
 </code></pre>
 <h3 id="response-6">Response</h3>
 <pre><code class="language-text">experiment stopped
 </code></pre>
-<h2 id="8-scenario-presets">8) Scenario Presets</h2>
-<h3 id="request-7">Request</h3>
+<h2 id="10-scenario-presets">10) Scenario Presets</h2>
+<h3 id="request-9">Request</h3>
 <pre><code class="language-http">GET /scenarios/presets
 </code></pre>
 <h3 id="response-7">Response</h3>

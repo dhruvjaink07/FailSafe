@@ -15,9 +15,24 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 		o.mu.Unlock()
 		return nil, errors.New("experiment not found")
 	}
-	if exp.ObservationType == "android" {
+	o.mu.Unlock()
+
+	if exp.TargetType == "android" || exp.ObservationType == "android" {
+		return o.GetAndroidMetrics(id)
+	}
+	return o.GetBackendMetrics(id)
+}
+
+func (o *Orchestrator) GetBackendMetrics(id string) (interface{}, error) {
+	o.mu.Lock()
+	exp, exists := o.experiments[id]
+	if !exists {
 		o.mu.Unlock()
-		return o.getAndroidMetrics(id), nil
+		return nil, errors.New("experiment not found")
+	}
+	if exp.TargetType == "android" || exp.ObservationType == "android" {
+		o.mu.Unlock()
+		return nil, errors.New("experiment is android; use android metrics endpoint")
 	}
 
 	endpointMap, exists := o.metrics[id]
@@ -26,6 +41,27 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 		return nil, errors.New("no metrics found")
 	}
 	o.mu.Unlock()
+
+	return o.buildBackendMetrics(id, exp, endpointMap), nil
+}
+
+func (o *Orchestrator) GetAndroidMetrics(id string) (interface{}, error) {
+	o.mu.Lock()
+	exp, exists := o.experiments[id]
+	if !exists {
+		o.mu.Unlock()
+		return nil, errors.New("experiment not found")
+	}
+	if exp.TargetType != "android" && exp.ObservationType != "android" {
+		o.mu.Unlock()
+		return nil, errors.New("experiment is backend; use backend metrics endpoint")
+	}
+	o.mu.Unlock()
+
+	return o.getAndroidMetrics(id), nil
+}
+
+func (o *Orchestrator) buildBackendMetrics(id string, exp *models.Experiment, endpointMap map[string][]models.MetricSample) interface{} {
 
 	result := make(map[string]interface{})
 	endpointResults := make(map[string]interface{})
@@ -184,7 +220,7 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 	}
 	result["timeline"] = o.buildTimelinePayload(id, exp.FaultStartedAt)
 
-	return result, nil
+	return result
 }
 
 func (o *Orchestrator) computeBaseline(id string) {

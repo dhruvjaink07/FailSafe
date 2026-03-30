@@ -53,7 +53,7 @@
 <li>Health: <code>GET {{baseUrl}}/health</code></li>
 <li>Start: <code>POST {{baseUrl}}/experiment/start</code></li>
 <li>Get experiment: <code>GET {{baseUrl}}/experiment/get?id={{experimentId}}</code></li>
-<li>Get metrics: <code>GET {{baseUrl}}/experiment/metrics?id={{experimentId}}</code></li>
+<li>Get metrics (compat): <code>GET {{baseUrl}}/experiment/metrics?id={{experimentId}}</code></li>
 <li>Stop (optional): <code>POST {{baseUrl}}/experiment/stop?id={{experimentId}}</code></li>
 </ol>
 <p>The start endpoint is shared, but there are two distinct request modes below.</p>
@@ -253,6 +253,13 @@ pm.environment.set(&quot;experimentId&quot;, data.id);
 </code></pre>
 <p>Final metrics (both modes):</p>
 <pre><code class="language-http">GET {{baseUrl}}/experiment/metrics?id={{experimentId}}
+</code></pre>
+<p>Segregated metrics endpoints:</p>
+<p>Backend/docker only:</p>
+<pre><code class="language-http">GET {{baseUrl}}/experiment/metrics/backend?id={{experimentId}}
+</code></pre>
+<p>Android only:</p>
+<pre><code class="language-http">GET {{baseUrl}}/experiment/metrics/android?id={{experimentId}}
 </code></pre>
 <h2 id="fault-options-quick-list">Fault Options Quick List</h2>
 <p>Backend/docker: <code>network_delay</code>, <code>packet_loss</code>, <code>cpu_stress</code>, <code>memory_stress</code>, <code>kill</code>.</p>

@@ -20,7 +20,9 @@ http://localhost:8000
 | APK upload | POST | /upload/apk | Upload APK and extract package/activity |
 | Experiment | POST | /experiment/start | Start Docker or Android resilience run |
 | Experiment | GET | /experiment/get?id=... | Fetch experiment object and lifecycle state |
-| Experiment | GET | /experiment/metrics?id=... | Fetch final/full metrics report |
+| Metrics (compat) | GET | /experiment/metrics?id=... | Compatibility endpoint, auto-routes by experiment type |
+| Metrics (backend) | GET | /experiment/metrics/backend?id=... | Docker/backend-only metrics payload |
+| Metrics (android) | GET | /experiment/metrics/android?id=... | Android-only metrics payload |
 | Android runtime | GET | /experiment/android/status?id=... | Lightweight polling payload during active run |
 | Experiment | POST | /experiment/stop?id=... | Stop an active run |
 | Presets | GET | /scenarios/presets | List available Android scenario presets and fault types |

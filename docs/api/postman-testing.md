@@ -34,7 +34,7 @@ Import these collection files for strict separation:
 1. Health: `GET {{baseUrl}}/health`
 2. Start: `POST {{baseUrl}}/experiment/start`
 3. Get experiment: `GET {{baseUrl}}/experiment/get?id={{experimentId}}`
-4. Get metrics: `GET {{baseUrl}}/experiment/metrics?id={{experimentId}}`
+4. Get metrics (compat): `GET {{baseUrl}}/experiment/metrics?id={{experimentId}}`
 5. Stop (optional): `POST {{baseUrl}}/experiment/stop?id={{experimentId}}`
 
 The start endpoint is shared, but there are two distinct request modes below.
@@ -278,6 +278,20 @@ Final metrics (both modes):
 
 ```http
 GET {{baseUrl}}/experiment/metrics?id={{experimentId}}
+```
+
+Segregated metrics endpoints:
+
+Backend/docker only:
+
+```http
+GET {{baseUrl}}/experiment/metrics/backend?id={{experimentId}}
+```
+
+Android only:
+
+```http
+GET {{baseUrl}}/experiment/metrics/android?id={{experimentId}}
 ```
 
 ## Fault Options Quick List

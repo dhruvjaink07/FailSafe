@@ -74,6 +74,12 @@ func main() {
 	http.HandleFunc("/experiment/metrics", func(w http.ResponseWriter, r *http.Request) {
 		metricsHandler(w, r, orch)
 	})
+	http.HandleFunc("/experiment/metrics/backend", func(w http.ResponseWriter, r *http.Request) {
+		metricsBackendHandler(w, r, orch)
+	})
+	http.HandleFunc("/experiment/metrics/android", func(w http.ResponseWriter, r *http.Request) {
+		metricsAndroidHandler(w, r, orch)
+	})
 	http.HandleFunc("/experiment/android/status", func(w http.ResponseWriter, r *http.Request) {
 		androidStatusHandler(w, r, orch)
 	})
@@ -474,6 +480,40 @@ func metricsHandler(w http.ResponseWriter, r *http.Request, orch *orchestrator.O
 	}
 
 	data, err := orch.GetMetrics(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	json.NewEncoder(w).Encode(data)
+}
+
+func metricsBackendHandler(w http.ResponseWriter, r *http.Request, orch *orchestrator.Orchestrator) {
+
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		http.Error(w, "missing id", http.StatusBadRequest)
+		return
+	}
+
+	data, err := orch.GetBackendMetrics(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	json.NewEncoder(w).Encode(data)
+}
+
+func metricsAndroidHandler(w http.ResponseWriter, r *http.Request, orch *orchestrator.Orchestrator) {
+
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		http.Error(w, "missing id", http.StatusBadRequest)
+		return
+	}
+
+	data, err := orch.GetAndroidMetrics(id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

@@ -73,10 +73,22 @@
 <td>Fetch experiment object and lifecycle state</td>
 </tr>
 <tr>
-<td>Experiment</td>
+<td>Metrics (compat)</td>
 <td>GET</td>
 <td>/experiment/metrics?id=...</td>
-<td>Fetch final/full metrics report</td>
+<td>Compatibility endpoint, auto-routes by experiment type</td>
+</tr>
+<tr>
+<td>Metrics (backend)</td>
+<td>GET</td>
+<td>/experiment/metrics/backend?id=...</td>
+<td>Docker/backend-only metrics payload</td>
+</tr>
+<tr>
+<td>Metrics (android)</td>
+<td>GET</td>
+<td>/experiment/metrics/android?id=...</td>
+<td>Android-only metrics payload</td>
 </tr>
 <tr>
 <td>Android runtime</td>
