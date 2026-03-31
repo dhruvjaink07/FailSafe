@@ -1,0 +1,68 @@
+<!-- Toggleable Backend/Android Example Block for backend-api.html -->
+<div style="margin-bottom: 1em;">
+  <button id="toggle-backend" onclick="showExample('backend')" style="margin-right: 0.5em;">Backend (Docker)</button>
+  <button id="toggle-android" onclick="showExample('android')">Android</button>
+  <button id="copy-example" onclick="copyExample()" style="float:right;">Copy</button>
+</div>
+<pre id="example-json" style="background:#f6f8fa;padding:1em;border-radius:6px;overflow-x:auto;"></pre>
+<script>
+const backendExample = `{
+  "faultType": "kill",
+  "targets": ["user-service"],
+  "targetType": "docker",
+  "observationType": "http",
+  "observedEndpoints": [
+    "http://api-gateway:8080/api/users/1",
+    "http://api-gateway:8080/api/orders/10",
+    "http://user-service:8081/users/1",
+    "http://order-service:8082/orders/10",
+    "http://payment-service:8083/payments/10",
+    "http://inventory-service:8084/inventory/A1",
+    "http://shipping-service:8085/shipping/10",
+    "http://notification-service:8086/notifications/10",
+    "http://recommendation-service:8087/recommendations/1"
+  ],
+  "duration": 60,
+  "adaptive": true,
+  "stepIntensity": 20,
+  "maxIntensity": 100,
+  "dependencyGraph": { ... },
+  "targetEndpointMap": { ... }
+}`;
+const androidExample = `{
+  "fault_type": "kill_app",
+  "targets": ["com.example.code"],
+  "target_type": "android",
+  "observation_type": "android",
+  "duration_seconds": 70,
+  "apk": "<apk_id>",
+  "android_run": {
+    "avd_name": "Pixel_8a",
+    "headless": true,
+    "reset_app_state": true
+  },
+  "scenarios": [
+    { "type": "network_disable", "at": 10, "duration_seconds": 6 },
+    { "type": "network_enable", "at": 18, "duration_seconds": 1 },
+    { "type": "kill_app", "at": 30, "duration_seconds": 1 },
+    { "type": "foreground_app", "at": 40, "duration_seconds": 2 }
+  ],
+  "expected": {
+    "running": true,
+    "not_crash": true,
+    "not_anr": true,
+    "should_recover": true
+  }
+}`;
+function showExample(type) {
+  document.getElementById('example-json').textContent = (type === 'backend') ? backendExample : androidExample;
+  document.getElementById('toggle-backend').style.fontWeight = (type === 'backend') ? 'bold' : 'normal';
+  document.getElementById('toggle-android').style.fontWeight = (type === 'android') ? 'bold' : 'normal';
+}
+function copyExample() {
+  const text = document.getElementById('example-json').textContent;
+  navigator.clipboard.writeText(text);
+}
+// Show backend by default
+showExample('backend');
+</script>

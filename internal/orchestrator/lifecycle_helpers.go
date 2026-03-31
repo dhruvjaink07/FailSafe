@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"errors"
+	"sort"
 	"time"
 
 	"github.com/dhruvjaink07/failsafe/internal/models"
@@ -115,7 +116,7 @@ func (o *Orchestrator) completeExperiment(id string) {
 	}
 }
 
-func (o *Orchestrator) GetExperiment(id string) (*models.Experiment, error) {
+func (o *Orchestrator) GetExperiment(id string) (map[string]interface{}, error) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
@@ -124,7 +125,120 @@ func (o *Orchestrator) GetExperiment(id string) (*models.Experiment, error) {
 		return nil, errors.New("experiment not found")
 	}
 
-	return exp, nil
+	// Prepare fault_injection_history for status output (v1 and v2)
+	var faultInjectionHistory []map[string]interface{}
+	var faultInjectionHistoryV2 []map[string]interface{}
+	var allRecoveryDurations []int64
+	var allDowntimeDurations []int64
+	var allFailures int
+	var anomalyEndpoints []string
+	for intensity, entry := range exp.TimelineHistory {
+		hist := map[string]interface{}{
+			"intensity":        intensity,
+			"fault_started_at": entry.FaultStartedAt,
+			"first_impact":     entry.FirstImpact,
+			"recovery_at":      entry.RecoveryAt,
+		}
+		faultInjectionHistory = append(faultInjectionHistory, hist)
+
+		// --- v2: durations, endpoint impact, cause, cascade, anomalies ---
+		impacts := map[string]map[string]interface{}{}
+		for ep, impactTime := range entry.FirstImpact {
+			recTime, hasRec := entry.RecoveryAt[ep]
+			var duration int64 = -1
+			if hasRec {
+				duration = recTime.Sub(impactTime).Milliseconds()
+				allRecoveryDurations = append(allRecoveryDurations, duration)
+			}
+			// Down duration: from first impact to recovery
+			impacts[ep] = map[string]interface{}{
+				"first_impact": impactTime,
+				"recovery_at":  recTime,
+				"duration_ms":  duration,
+			}
+			if duration > 0 {
+				allDowntimeDurations = append(allDowntimeDurations, duration)
+			}
+		}
+		// Fault cause and cascade path
+		cause := o.probableCause(id, entry.FirstImpact)
+		// Cascade path: endpoints affected in order of first impact
+		cascade := []string{}
+		type epImpact struct {
+			ep string
+			t  time.Time
+		}
+		var impactsList []epImpact
+		for ep, t := range entry.FirstImpact {
+			impactsList = append(impactsList, epImpact{ep, t})
+		}
+		sort.Slice(impactsList, func(i, j int) bool { return impactsList[i].t.Before(impactsList[j].t) })
+		for _, v := range impactsList {
+			cascade = append(cascade, v.ep)
+		}
+
+		// Anomaly detection: endpoints with recovery > 2x median
+		var anomalyList []string
+		var durations []int64
+		for _, v := range impacts {
+			if d, ok := v["duration_ms"].(int64); ok && d > 0 {
+				durations = append(durations, d)
+			}
+		}
+		var median int64
+		if len(durations) > 0 {
+			sort.Slice(durations, func(i, j int) bool { return durations[i] < durations[j] })
+			median = durations[len(durations)/2]
+			for ep, v := range impacts {
+				if d, ok := v["duration_ms"].(int64); ok && d > 2*median && median > 0 {
+					anomalyList = append(anomalyList, ep)
+				}
+			}
+		}
+		if len(anomalyList) > 0 {
+			anomalyEndpoints = append(anomalyEndpoints, anomalyList...)
+		}
+		faultInjectionHistoryV2 = append(faultInjectionHistoryV2, map[string]interface{}{
+			"intensity":        intensity,
+			"fault_started_at": entry.FaultStartedAt,
+			"impacts":          impacts,
+			"fault_cause":      cause,
+			"cascade_path":     cascade,
+			"anomalies":        anomalyList,
+		})
+	}
+
+	// Optionally, you can return a struct with both exp and faultInjectionHistory if your API handler supports it
+	// For now, just return exp (API handler should be updated to include faultInjectionHistory in the response)
+	// Attach new fields to exp via a map for API handler
+	expMap := map[string]interface{}{}
+	// Copy all exported fields from exp (for backward compatibility)
+	// This is a shallow copy; for deep copy, use a helper if needed
+	// Use JSON marshal/unmarshal for deep copy if required
+	// For now, just add new fields
+	expMap["experiment"] = exp
+	expMap["fault_injection_history"] = faultInjectionHistory
+	expMap["fault_injection_history_v2"] = faultInjectionHistoryV2
+	// Aggregate stats
+	var meanRecovery, medianRecovery int64
+	if len(allRecoveryDurations) > 0 {
+		sum := int64(0)
+		for _, d := range allRecoveryDurations {
+			sum += d
+		}
+		meanRecovery = sum / int64(len(allRecoveryDurations))
+		sorted := append([]int64(nil), allRecoveryDurations...)
+		sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+		medianRecovery = sorted[len(sorted)/2]
+	}
+	expMap["aggregate_stats"] = map[string]interface{}{
+		"total_downtime_ms":  allDowntimeDurations,
+		"mean_recovery_ms":   meanRecovery,
+		"median_recovery_ms": medianRecovery,
+		"total_failures":     allFailures,
+		"anomaly_endpoints":  anomalyEndpoints,
+	}
+	return expMap, nil
 }
 
 func (o *Orchestrator) StopExperiment(id string) error {

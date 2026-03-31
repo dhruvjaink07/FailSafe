@@ -190,7 +190,69 @@ Returns experiment object with id, state, phase, and metadata.
 
 ### Backend Testing Request Bodies
 
+
 Use these payloads directly for integration tests against `POST /experiment/start`.
+
+#### Example: Backend (Docker) Experiment Request
+
+```json
+{
+  "faultType": "kill",
+  "targets": ["user-service"],
+  "targetType": "docker",
+  "observationType": "http",
+  "observedEndpoints": [
+    "http://api-gateway:8080/api/users/1",
+    "http://api-gateway:8080/api/orders/10",
+    "http://user-service:8081/users/1",
+    "http://order-service:8082/orders/10",
+    "http://payment-service:8083/payments/10",
+    "http://inventory-service:8084/inventory/A1",
+    "http://shipping-service:8085/shipping/10",
+    "http://notification-service:8086/notifications/10",
+    "http://recommendation-service:8087/recommendations/1"
+  ],
+  "duration": 60,
+  "adaptive": true,
+  "stepIntensity": 20,
+  "maxIntensity": 100,
+  "dependencyGraph": {
+    "http://api-gateway:8080/api/users/1": ["http://user-service:8081/users/1"],
+    "http://api-gateway:8080/api/orders/10": ["http://order-service:8082/orders/10"],
+    "http://user-service:8081/users/1": ["http://recommendation-service:8087/recommendations/1"],
+    "http://order-service:8082/orders/10": [
+      "http://payment-service:8083/payments/10",
+      "http://inventory-service:8084/inventory/A1",
+      "http://shipping-service:8085/shipping/10"
+    ],
+    "http://payment-service:8083/payments/10": [],
+    "http://inventory-service:8084/inventory/A1": [],
+    "http://shipping-service:8085/shipping/10": ["http://notification-service:8086/notifications/10"],
+    "http://notification-service:8086/notifications/10": [],
+    "http://recommendation-service:8087/recommendations/1": ["http://inventory-service:8084/inventory/A1"]
+  },
+  "targetEndpointMap": {
+    "api-gateway": [
+      "http://api-gateway:8080/api/users/1",
+      "http://api-gateway:8080/api/orders/10"
+    ],
+    "user-service": ["http://user-service:8081/users/1"],
+    "order-service": ["http://order-service:8082/orders/10"],
+    "payment-service": ["http://payment-service:8083/payments/10"],
+    "inventory-service": ["http://inventory-service:8084/inventory/A1"],
+    "shipping-service": ["http://shipping-service:8085/shipping/10"],
+    "notification-service": ["http://notification-service:8086/notifications/10"],
+    "recommendation-service": ["http://recommendation-service:8087/recommendations/1"]
+  }
+}
+```
+
+> **Note:**
+> - Use this shape for backend (docker) experiments. For Android, see the Android example below.
+> - The available fault types depend on the experiment mode:
+>   - **Backend (Docker):** kill, network_delay, packet_loss, cpu_stress, memory_stress, etc.
+>   - **Android:** kill_app, network_disable, network_latency, revoke_camera, etc.
+> - The UI and API will only show valid fault types for the selected mode. Toggle the experiment type to see the relevant fault options.
 
 ### Embedded From Existing Collection (Docker)
 
