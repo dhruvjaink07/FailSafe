@@ -1,11 +1,29 @@
 FROM golang:1.25-alpine
 
+
+
+
 WORKDIR /app
+# Install all required dependencies for Go, Docker, Java, unzip, and aapt on Alpine
+RUN apk add --no-cache \
+    docker-cli \
+    wget \
+    unzip \
+    openjdk17-jre \
+    ca-certificates \
+    bash
 
-RUN apk add --no-cache docker-cli
 
-COPY go.mod go.sum ./
+
+# Copy provided aapt binary and make it executable
+COPY tools/aapt /usr/local/bin/aapt
+RUN chmod +x /usr/local/bin/aapt
+
+
+COPY go.mod ./go.mod
+COPY go.sum ./go.sum
 RUN go mod download
+
 
 COPY . .
 

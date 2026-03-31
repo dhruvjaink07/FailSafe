@@ -14,6 +14,8 @@ type AndroidRunOptions struct {
 	AVDName       string
 	Headless      bool
 	ResetAppState bool
+	// UI: "background" (default) or "foreground" (show emulator window)
+	UIMode string // "background" or "foreground"
 }
 
 type AndroidAppConfig struct {
@@ -62,11 +64,21 @@ func (o *Orchestrator) StartExperiment(
 	}
 
 	var adbClient *adb.Client
+	var useDeps models.DependencyGraph = deps
 	if targetType == "android" {
 		if resolvedAndroidApp.APKPath == "" || resolvedAndroidApp.Package == "" || resolvedAndroidApp.Activity == "" {
 			return nil, errors.New("android app config missing apk path/package/activity")
 		}
-
+		// UI mode: default to background if not set
+		uiMode := "background"
+		if androidOptions != nil && androidOptions.UIMode != "" {
+			uiMode = androidOptions.UIMode
+		}
+		if androidOptions != nil {
+			androidOptions.Headless = (uiMode == "background")
+		}
+		// For Android, skip dependency graph (individual app testing)
+		useDeps = nil
 		client, err := o.setupAndroid(id, androidOptions, resolvedAndroidApp)
 		if err != nil {
 			return nil, err
@@ -76,7 +88,7 @@ func (o *Orchestrator) StartExperiment(
 		o.setupDocker(targets)
 	}
 
-	exp := o.createExperiment(id, targets, targetType, observationType, faultType, duration, adaptive, stepIntensity, maxIntensity, deps, targetMap)
+	exp := o.createExperiment(id, targets, targetType, observationType, faultType, duration, adaptive, stepIntensity, maxIntensity, useDeps, targetMap)
 	exp.Scenario = scheduledFaults
 	exp.Expected = expected
 	if targetType == "android" {
