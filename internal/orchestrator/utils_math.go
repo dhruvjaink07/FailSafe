@@ -62,3 +62,23 @@ func safeDiv(a, b float64) float64 {
 	}
 	return a / b
 }
+
+func clamp(val float64, min float64, max float64) float64 {
+	if val < min {
+		return min
+	}
+	if val > max {
+		return max
+	}
+	return val
+}
+
+func classify(score float64) string {
+	if score < 40 {
+		return "critical"
+	}
+	if score < 70 {
+		return "degraded"
+	}
+	return "stable"
+}

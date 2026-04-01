@@ -266,3 +266,139 @@ func (o *Orchestrator) StopExperiment(id string) error {
 
 	return nil
 }
+
+func (o *Orchestrator) AddFrontendMetrics(data []models.FrontendMetrics) {
+
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	for _, metric := range data {
+		o.frontendMetrics[metric.ExperimentID] = append(o.frontendMetrics[metric.ExperimentID], metric)
+	}
+}
+
+func computeFrontendScore(metrics []models.FrontendMetrics) map[string]interface{} {
+	if len(metrics) == 0 {
+		return map[string]interface{}{
+			"score":  100,
+			"status": "no_data",
+		}
+	}
+
+	var totalLCP, totalCLS, totalINP float64
+
+	count := float64(len(metrics))
+	for _, m := range metrics {
+		totalLCP += m.Metrics.LCP
+		totalCLS += m.Metrics.CLS
+		totalINP += m.Metrics.INP
+	}
+
+	avgLCP := totalLCP / count
+	avgCLS := totalCLS / count
+	avgINP := totalINP / count
+
+	// --- Normalize (basic thresholds) ---
+	lcpScore := clamp(100-(avgLCP/40), 0, 100)
+	clsScore := clamp(100-(avgCLS*200), 0, 100)
+	inpScore := clamp(100-(avgINP/5), 0, 100)
+
+	// --- Weighted score ---
+	finalScore := (lcpScore*0.4 + clsScore*0.3 + inpScore*0.3)
+
+	status := "stable"
+	if finalScore < 40 {
+		status = "critical"
+	} else if finalScore < 70 {
+		status = "degraded"
+	}
+
+	return map[string]interface{}{
+		"score":  finalScore,
+		"status": status,
+		"breakdown": map[string]interface{}{
+			"lcp": avgLCP,
+			"cls": avgCLS,
+			"inp": avgINP,
+		},
+	}
+}
+
+func extractBackendScore(result map[string]interface{}) float64 {
+
+	endpoints, ok := result["endpoints"].(map[string]interface{})
+	if !ok || len(endpoints) == 0 {
+		return 100
+	}
+
+	var total float64
+	var count float64
+
+	for _, v := range endpoints {
+		ep, ok := v.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		if score, ok := ep["stability_score"].(float64); ok {
+			total += score
+			count++
+		}
+	}
+
+	if count == 0 {
+		return 100
+	}
+
+	return total / count
+}
+
+func computeFailSafeIndex(
+	backendScore *float64,
+	frontendScore *float64,
+) map[string]interface{} {
+
+	// ---- CASE 1: BOTH PRESENT ----
+	if backendScore != nil && frontendScore != nil {
+
+		wBackend := 0.6
+		wFrontend := 0.4
+
+		final := (*backendScore)*wBackend + (*frontendScore)*wFrontend
+
+		return map[string]interface{}{
+			"score": final,
+			"mode":  "fullstack",
+			"weights": map[string]float64{
+				"backend":  wBackend,
+				"frontend": wFrontend,
+			},
+			"status": classify(final),
+		}
+	}
+
+	// ---- CASE 2: FRONTEND ONLY ----
+	if frontendScore != nil {
+		return map[string]interface{}{
+			"score":  *frontendScore,
+			"mode":   "frontend_only",
+			"status": classify(*frontendScore),
+		}
+	}
+
+	// ---- CASE 3: BACKEND ONLY ----
+	if backendScore != nil {
+		return map[string]interface{}{
+			"score":  *backendScore,
+			"mode":   "backend_only",
+			"status": classify(*backendScore),
+		}
+	}
+
+	// ---- CASE 4: NO DATA ----
+	return map[string]interface{}{
+		"score":  100,
+		"mode":   "no_data",
+		"status": "unknown",
+	}
+}

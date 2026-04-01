@@ -15,7 +15,6 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 		o.mu.Unlock()
 		return nil, errors.New("experiment not found")
 	}
-	// Copy timeline_history for fault injection history
 	timelineHistory := exp.TimelineHistory
 	o.mu.Unlock()
 
@@ -25,7 +24,9 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 	var allDowntimeDurations []int64
 	var allFailures int
 	var anomalyEndpoints []string
+
 	for intensity, entry := range timelineHistory {
+
 		hist := map[string]interface{}{
 			"intensity":        intensity,
 			"fault_started_at": entry.FaultStartedAt,
@@ -34,63 +35,79 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 		}
 		faultInjectionHistory = append(faultInjectionHistory, hist)
 
-		// --- v2: durations, endpoint impact, cause, cascade, anomalies ---
+		// ---- v2 ----
 		impacts := map[string]map[string]interface{}{}
+
 		for ep, impactTime := range entry.FirstImpact {
+
 			recTime, hasRec := entry.RecoveryAt[ep]
+
 			var duration int64 = -1
 			if hasRec {
 				duration = recTime.Sub(impactTime).Milliseconds()
 				allRecoveryDurations = append(allRecoveryDurations, duration)
 			}
-			// Down duration: from first impact to recovery
+
 			impacts[ep] = map[string]interface{}{
 				"first_impact": impactTime,
 				"recovery_at":  recTime,
 				"duration_ms":  duration,
 			}
+
 			if duration > 0 {
 				allDowntimeDurations = append(allDowntimeDurations, duration)
 			}
 		}
-		// Fault cause and cascade path
+
+		// ---- cause ----
 		cause := o.probableCause(id, entry.FirstImpact)
-		// Cascade path: endpoints affected in order of first impact
-		cascade := []string{}
+
+		// ---- cascade ----
 		type epImpact struct {
 			ep string
 			t  time.Time
 		}
+
 		var impactsList []epImpact
 		for ep, t := range entry.FirstImpact {
 			impactsList = append(impactsList, epImpact{ep, t})
 		}
-		sort.Slice(impactsList, func(i, j int) bool { return impactsList[i].t.Before(impactsList[j].t) })
+
+		sort.Slice(impactsList, func(i, j int) bool {
+			return impactsList[i].t.Before(impactsList[j].t)
+		})
+
+		var cascade []string
 		for _, v := range impactsList {
 			cascade = append(cascade, v.ep)
 		}
 
-		// Anomaly detection: endpoints with recovery > 2x median
+		// ---- anomalies ----
 		var anomalyList []string
 		var durations []int64
+
 		for _, v := range impacts {
 			if d, ok := v["duration_ms"].(int64); ok && d > 0 {
 				durations = append(durations, d)
 			}
 		}
+
 		var median int64
 		if len(durations) > 0 {
 			sort.Slice(durations, func(i, j int) bool { return durations[i] < durations[j] })
 			median = durations[len(durations)/2]
+
 			for ep, v := range impacts {
 				if d, ok := v["duration_ms"].(int64); ok && d > 2*median && median > 0 {
 					anomalyList = append(anomalyList, ep)
 				}
 			}
 		}
+
 		if len(anomalyList) > 0 {
 			anomalyEndpoints = append(anomalyEndpoints, anomalyList...)
 		}
+
 		faultInjectionHistoryV2 = append(faultInjectionHistoryV2, map[string]interface{}{
 			"intensity":        intensity,
 			"fault_started_at": entry.FaultStartedAt,
@@ -101,29 +118,76 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 		})
 	}
 
+	// ===== EXISTING BACKEND / ANDROID =====
 	var result interface{}
+
 	if exp.TargetType == "android" || exp.ObservationType == "android" {
 		result, _ = o.GetAndroidMetrics(id)
 	} else {
 		result, _ = o.GetBackendMetrics(id)
 	}
 
-	// If result is a map, add the new fields
+	// ===== FINAL INTEGRATION =====
 	if m, ok := result.(map[string]interface{}); ok {
+
+		// ---- FRONTEND RAW ----
+		o.mu.Lock()
+		frontend := o.frontendMetrics[id]
+		o.mu.Unlock()
+
+		m["frontend"] = frontend
+
+		// ---- FRONTEND SCORE ----
+		frontendScoreMap := computeFrontendScore(frontend)
+		m["frontend_score"] = frontendScoreMap
+
+		// ---- POINTER SETUP ----
+		var frontendScorePtr *float64
+		var backendScorePtr *float64
+
+		// frontend present
+		if len(frontend) > 0 {
+			if s, ok := frontendScoreMap["score"].(float64); ok {
+				frontendScorePtr = &s
+			}
+		}
+
+		// backend present
+		backendScore := extractBackendScore(m)
+
+		if endpoints, ok := m["endpoints"].(map[string]interface{}); ok && len(endpoints) > 0 {
+			backendScorePtr = &backendScore
+		}
+
+		// ---- FINAL FAILSAFE INDEX ----
+		m["failsafe_index"] = computeFailSafeIndex(
+			backendScorePtr,
+			frontendScorePtr,
+		)
+
+		// ---- EXISTING HISTORY ----
 		m["fault_injection_history"] = faultInjectionHistory
 		m["fault_injection_history_v2"] = faultInjectionHistoryV2
-		// Aggregate stats
+
+		// ---- AGGREGATES ----
 		var meanRecovery, medianRecovery int64
+
 		if len(allRecoveryDurations) > 0 {
+
 			sum := int64(0)
 			for _, d := range allRecoveryDurations {
 				sum += d
 			}
 			meanRecovery = sum / int64(len(allRecoveryDurations))
+
 			sorted := append([]int64(nil), allRecoveryDurations...)
-			sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+			sort.Slice(sorted, func(i, j int) bool {
+				return sorted[i] < sorted[j]
+			})
+
 			medianRecovery = sorted[len(sorted)/2]
 		}
+
 		m["aggregate_stats"] = map[string]interface{}{
 			"total_downtime_ms":  allDowntimeDurations,
 			"mean_recovery_ms":   meanRecovery,
@@ -131,8 +195,10 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 			"total_failures":     allFailures,
 			"anomaly_endpoints":  anomalyEndpoints,
 		}
+
 		return m, nil
 	}
+
 	return result, nil
 }
 

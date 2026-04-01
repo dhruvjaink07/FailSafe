@@ -44,6 +44,8 @@ type Orchestrator struct {
 	emulatorDeviceID string
 	emulatorAVDName  string
 
+	frontendMetrics map[string][]models.FrontendMetrics
+
 	mu sync.Mutex
 }
 
@@ -78,5 +80,6 @@ func NewOrchestrator(
 		emulatorRunning:  false,
 		emulatorDeviceID: "emulator-5554",
 		emulatorAVDName:  "Pixel_8a",
+		frontendMetrics:  make(map[string][]models.FrontendMetrics),
 	}
 }
