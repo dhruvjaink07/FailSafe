@@ -1,0 +1,56 @@
+{
+  "aggregate_stats": {
+    "anomaly_endpoints": null,
+    "mean_recovery_ms": 0,
+    "median_recovery_ms": 0,
+    "total_downtime_ms": null,
+    "total_failures": 0
+  },
+  "experiment": {
+    "id": "7ae28a67-2b94-45c5-8dfb-8292ab38ed6a",
+    "observed_endpoints": null,
+    "targets": [
+      "frontend-app"
+    ],
+    "target_type": "frontend",
+    "observation_type": "",
+    "fault_type": "latency",
+    "duration_seconds": 30,
+    "expected": {},
+    "frontend_run": {
+      "base_url": "http://127.0.0.1:3001",
+      "metrics_endpoint": "http://localhost:8000/frontend/metrics",
+      "target_urls": [
+        "/api/fast",
+        "/api/slow"
+      ]
+    },
+    "state": "completed",
+    "phase": "completed",
+    "fault_started_at": "2026-04-02T21:37:23.7531818+05:30",
+    "intensity": 0,
+    "adaptive": false,
+    "max_intensity": 0,
+    "step_intensity": 0,
+    "current_intensity": 0,
+    "max_stable_intensity": 0,
+    "breaking_intensity": 0,
+    "intensity_history": null,
+    "timeline_history": {},
+    "baseline_metrics": {
+      "AvgLatency": 0,
+      "P95": 0,
+      "ErrorRate": 100
+    },
+    "dependency_graph": null,
+    "target_endpoint_map": null,
+    "graph_metadata": {
+      "total_nodes": 0,
+      "max_depth": 0
+    },
+    "created_at": "2026-04-02T21:37:17.7482569+05:30",
+    "updated_at": "2026-04-02T21:37:28.7538074+05:30"
+  },
+  "fault_injection_history": null,
+  "fault_injection_history_v2": null
+}

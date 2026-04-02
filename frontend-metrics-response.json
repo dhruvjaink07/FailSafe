@@ -1,0 +1,151 @@
+{
+  "failsafe_index": {
+    "mode": "frontend_only",
+    "score": 98.72,
+    "status": "stable"
+  },
+  "frontend": [
+    {
+      "experiment_id": "7ae28a67-2b94-45c5-8dfb-8292ab38ed6a",
+      "phase": "baseline",
+      "page": "/",
+      "metrics": {
+        "lcp": 128,
+        "cls": 0,
+        "inp": 0,
+        "long_tasks": 0,
+        "errors": 0,
+        "unhandled_rejections": 0
+      },
+      "api_calls": [],
+      "timestamp": 1775146054294
+    },
+    {
+      "experiment_id": "7ae28a67-2b94-45c5-8dfb-8292ab38ed6a",
+      "phase": "injecting",
+      "page": "/",
+      "metrics": {
+        "lcp": 128,
+        "cls": 0,
+        "inp": 0,
+        "long_tasks": 0,
+        "errors": 0,
+        "unhandled_rejections": 0
+      },
+      "api_calls": [
+        {
+          "url": "/api/slow",
+          "duration": 1019.3000000119209,
+          "status": 200
+        },
+        {
+          "url": "/api/slow",
+          "duration": 1019.3000000119209,
+          "status": 200
+        }
+      ],
+      "timestamp": 1775146059430
+    },
+    {
+      "experiment_id": "7ae28a67-2b94-45c5-8dfb-8292ab38ed6a",
+      "phase": "baseline",
+      "page": "/",
+      "metrics": {
+        "lcp": 128,
+        "cls": 0,
+        "inp": 0,
+        "long_tasks": 0,
+        "errors": 0,
+        "unhandled_rejections": 0
+      },
+      "api_calls": [],
+      "timestamp": 1775146054294
+    },
+    {
+      "experiment_id": "7ae28a67-2b94-45c5-8dfb-8292ab38ed6a",
+      "phase": "injecting",
+      "page": "/",
+      "metrics": {
+        "lcp": 128,
+        "cls": 0,
+        "inp": 0,
+        "long_tasks": 0,
+        "errors": 0,
+        "unhandled_rejections": 0
+      },
+      "api_calls": [
+        {
+          "url": "http://localhost:8000/frontend/metrics",
+          "duration": 716.9000000357628,
+          "status": 0
+        },
+        {
+          "url": "http://localhost:8000/frontend/metrics",
+          "duration": 717,
+          "status": 0
+        },
+        {
+          "url": "/api/fast",
+          "duration": 712,
+          "status": 200
+        },
+        {
+          "url": "/api/fast",
+          "duration": 712,
+          "status": 200
+        }
+      ],
+      "timestamp": 1775146064391
+    },
+    {
+      "experiment_id": "7ae28a67-2b94-45c5-8dfb-8292ab38ed6a",
+      "phase": "injecting",
+      "page": "/",
+      "metrics": {
+        "lcp": 128,
+        "cls": 0,
+        "inp": 0,
+        "long_tasks": 0,
+        "errors": 0,
+        "unhandled_rejections": 0
+      },
+      "api_calls": [
+        {
+          "url": "/api/slow",
+          "duration": 1019.3000000119209,
+          "status": 200
+        },
+        {
+          "url": "/api/slow",
+          "duration": 1019.3000000119209,
+          "status": 200
+        }
+      ],
+      "timestamp": 1775146059430
+    },
+    {
+      "experiment_id": "7ae28a67-2b94-45c5-8dfb-8292ab38ed6a",
+      "phase": "baseline",
+      "page": "/",
+      "metrics": {
+        "lcp": 128,
+        "cls": 0,
+        "inp": 0,
+        "long_tasks": 0,
+        "errors": 0,
+        "unhandled_rejections": 0
+      },
+      "api_calls": [],
+      "timestamp": 1775146054294
+    }
+  ],
+  "frontend_score": {
+    "breakdown": {
+      "cls": 0,
+      "inp": 0,
+      "lcp": 128
+    },
+    "score": 98.72,
+    "status": "stable"
+  }
+}

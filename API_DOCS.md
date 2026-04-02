@@ -179,9 +179,9 @@ Android metrics fields to verify:
   "target_type": "frontend",
   "duration_seconds": 20,
   "frontend_run": {
-    "base_url": "https://example.com",
-    "metrics_endpoint": "/frontend/metrics",
-    "target_urls": ["https://example.com/api/*"]
+    "base_url": "http://127.0.0.1:3001",
+    "metrics_endpoint": "http://localhost:8000/frontend/metrics",
+    "target_urls": ["/api/fast", "/api/slow"]
   }
 }
 ```
@@ -350,18 +350,25 @@ Install Playwright once:
 npm install
 ```
 
+Use the local test server as the frontend target:
+
+- App URL: `http://127.0.0.1:3001`
+- API endpoints under test: `/api/fast`, `/api/slow`
+- Metrics ingestion: `http://localhost:8000/frontend/metrics`
+
 Create frontend experiment:
 
 ```powershell
 $frontendStartBody = @'
 {
   "fault_type": "latency",
+  "targets": ["frontend-app"],
   "target_type": "frontend",
   "duration_seconds": 30,
   "frontend_run": {
-    "base_url": "http://localhost:8080",
+    "base_url": "http://127.0.0.1:3001",
     "metrics_endpoint": "http://localhost:8000/frontend/metrics",
-    "target_urls": ["/api/users", "/api/orders"]
+    "target_urls": ["/api/fast", "/api/slow"]
   }
 }
 '@
@@ -370,13 +377,14 @@ $frontendExp = Invoke-RestMethod -Method Post -Uri "http://localhost:8000/experi
 $frontendExp.id
 ```
 
-Run Playwright collector and sender scripts through runner:
+Run the Playwright integration harness:
 
 ```powershell
 $env:EXPERIMENT_ID = $frontendExp.id
-$env:BASE_URL = "http://localhost:8080"
+$env:BASE_URL = "http://127.0.0.1:3001"
 $env:FAILSAFE_FRONTEND_ENDPOINT = "http://localhost:8000/frontend/metrics"
-node playwright/runner.js
+$env:FAILSAFE_CONTROLLER_URL = "http://localhost:8000"
+node internal/frontend/automation/playwright/runner.js
 ```
 
 Fetch frontend status and metrics:

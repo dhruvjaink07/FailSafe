@@ -238,25 +238,39 @@ async function applyChaos(context, page, chaos) {
     cpu_rate: chaos.cpuSlowdownRate,
   });
 
+  // Ensure no existing routes before adding new ones
+  try {
+    await context.unroute("**/*");
+  } catch (_) {
+    // Route might not exist, that's ok
+  }
+
   if (chaos.forceOffline) {
     await context.setOffline(true);
   }
 
   await context.route("**/*", async (route) => {
-    const requestUrl = route.request().url();
-    const isTarget = chaos.targetUrls.some((token) => requestUrl.includes(token));
+    try {
+      const requestUrl = route.request().url();
+      const isTarget = chaos.targetUrls.some((token) => requestUrl.includes(token));
 
-    if (!isTarget) {
-      return route.continue();
+      if (!isTarget) {
+        await route.continue();
+        return;
+      }
+
+      await sleep(chaos.networkDelayMs);
+
+      if ((hashCode(requestUrl) % 100) < chaos.failureRate * 100) {
+        await route.abort();
+        return;
+      }
+
+      await route.continue();
+    } catch (err) {
+      // Route already handled or page closed
+      logAudit("route_handler_error", { message: err.message });
     }
-
-    await sleep(chaos.networkDelayMs);
-
-    if ((hashCode(requestUrl) % 100) < chaos.failureRate * 100) {
-      return route.abort();
-    }
-
-    return route.continue();
   });
 
   const client = await context.newCDPSession(page);

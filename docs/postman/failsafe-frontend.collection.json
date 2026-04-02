@@ -1,0 +1,238 @@
+{
+  "info": {
+    "_postman_id": "failsafe-frontend-api",
+    "name": "FailSafe Frontend API",
+    "description": "Complete frontend experiment workflow: start → ingest metrics → check status → get metrics → stop",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Start Frontend Experiment",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var jsonData = pm.response.json();",
+              "pm.collectionVariables.set('experiment_id', jsonData.id);",
+              "pm.collectionVariables.set('base_url', jsonData.frontend_run.base_url);",
+              "pm.collectionVariables.set('metrics_endpoint', jsonData.frontend_run.metrics_endpoint);",
+              "console.log('Experiment ID: ' + pm.collectionVariables.get('experiment_id'));",
+              "pm.test('Start experiment successful', function() {",
+              "  pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+              "  pm.expect(jsonData.state).to.equal('running');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"fault_type\": \"latency\",\n  \"targets\": [\"dhruvjain-portfolio\"],\n  \"target_type\": \"frontend\",\n  \"duration_seconds\": 20,\n  \"frontend_run\": {\n    \"base_url\": \"https://dhruvjain.xyz/\",\n    \"metrics_endpoint\": \"http://localhost:8000/frontend/metrics\",\n    \"target_urls\": [\"dhruvjain.xyz\"]\n  }\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8000/experiments/frontend/start",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "experiments",
+            "frontend",
+            "start"
+          ]
+        }
+      }
+    },
+    {
+      "name": "2. Ingest Frontend Metrics (Mock)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Metrics ingestion successful', function() {",
+              "  pm.expect(pm.response.code).to.be.oneOf([200, 202]);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"metrics\": [\n    {\n      \"experiment_id\": \"{{experiment_id}}\",\n      \"phase\": \"baseline\",\n      \"page\": \"/\",\n      \"metrics\": {\n        \"lcp\": 1200,\n        \"cls\": 0.04,\n        \"inp\": 85,\n        \"long_tasks\": 0,\n        \"errors\": 0,\n        \"unhandled_rejections\": 0\n      },\n      \"api_calls\": [\n        {\n          \"url\": \"https://dhruvjain.xyz/\",\n          \"duration\": 280,\n          \"status\": 200\n        }\n      ],\n      \"timestamp\": {{$timestamp}}\n    },\n    {\n      \"experiment_id\": \"{{experiment_id}}\",\n      \"phase\": \"injecting\",\n      \"page\": \"/\",\n      \"metrics\": {\n        \"lcp\": 1650,\n        \"cls\": 0.08,\n        \"inp\": 120,\n        \"long_tasks\": 2,\n        \"errors\": 1,\n        \"unhandled_rejections\": 0\n      },\n      \"api_calls\": [\n        {\n          \"url\": \"https://dhruvjain.xyz/api/data\",\n          \"duration\": 1200,\n          \"status\": 200\n        }\n      ],\n      \"timestamp\": {{$timestamp}}\n    },\n    {\n      \"experiment_id\": \"{{experiment_id}}\",\n      \"phase\": \"recovery\",\n      \"page\": \"/\",\n      \"metrics\": {\n        \"lcp\": 1300,\n        \"cls\": 0.05,\n        \"inp\": 95,\n        \"long_tasks\": 0,\n        \"errors\": 0,\n        \"unhandled_rejections\": 0\n      },\n      \"api_calls\": [\n        {\n          \"url\": \"https://dhruvjain.xyz/\",\n          \"duration\": 310,\n          \"status\": 200\n        }\n      ],\n      \"timestamp\": {{$timestamp}}\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8000/frontend/metrics",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "frontend",
+            "metrics"
+          ]
+        }
+      }
+    },
+    {
+      "name": "3. Get Experiment Status",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var jsonData = pm.response.json();",
+              "pm.test('Status endpoint returns valid state', function() {",
+              "  pm.expect(pm.response.code).to.equal(200);",
+              "  pm.expect(['running', 'completed', 'failed']).to.include(jsonData.experiment.state);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8000/experiments/frontend/status?id={{experiment_id}}",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "experiments",
+            "frontend",
+            "status"
+          ],
+          "query": [
+            {
+              "key": "id",
+              "value": "{{experiment_id}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "4. Get Experiment Metrics",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var jsonData = pm.response.json();",
+              "pm.test('Metrics endpoint returns scoring data', function() {",
+              "  pm.expect(pm.response.code).to.equal(200);",
+              "  pm.expect(jsonData.failsafe_index).to.exist;",
+              "  pm.expect(jsonData.frontend).to.exist;",
+              "  pm.expect(['stable', 'degraded', 'no_data']).to.include(jsonData.frontend_score.status);",
+              "});",
+              "pm.test('FailSafe score is present', function() {",
+              "  var score = pm.response.json().failsafe_index.score;",
+              "  pm.expect(score).to.be.within(0, 100);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8000/experiments/frontend/metrics?id={{experiment_id}}",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "experiments",
+            "frontend",
+            "metrics"
+          ],
+          "query": [
+            {
+              "key": "id",
+              "value": "{{experiment_id}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "5. Stop Experiment",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Experiment stopped successfully', function() {",
+              "  pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8000/experiments/frontend/stop?id={{experiment_id}}",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "experiments",
+            "frontend",
+            "stop"
+          ],
+          "query": [
+            {
+              "key": "id",
+              "value": "{{experiment_id}}"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "experiment_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "base_url",
+      "value": "https://dhruvjain.xyz/",
+      "type": "string"
+    },
+    {
+      "key": "metrics_endpoint",
+      "value": "http://localhost:8000/frontend/metrics",
+      "type": "string"
+    }
+  ]
+}
