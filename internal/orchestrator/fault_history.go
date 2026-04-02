@@ -10,15 +10,22 @@ import (
 type FaultEvent struct {
 	Type      string    `json:"type"`
 	Timestamp time.Time `json:"timestamp"`
+	Phase     string    `json:"phase,omitempty"`
 }
 
 func (o *Orchestrator) recordFaultEvent(id string, faultType fault.FaultType) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
+	phase := ""
+	if exp, ok := o.experiments[id]; ok {
+		phase = string(exp.Phase)
+	}
+
 	o.faultHistory[id] = append(o.faultHistory[id], FaultEvent{
 		Type:      string(faultType),
 		Timestamp: time.Now(),
+		Phase:     phase,
 	})
 }
 

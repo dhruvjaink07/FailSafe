@@ -145,20 +145,30 @@ Android start notes:
 - Use `android_run.headless`; `ui_mode` is not part of the current API and is ignored.
 - `observed_endpoints` may be `null` on the start response for Android runs; that is expected.
 - `scenario` is accepted as a single list field and is reflected back in the experiment payload.
+- Android tooling preflight is performed at server startup and cached. If unavailable, Android start fails fast with `400` and a message beginning with `android preflight failed` instead of creating a partially initialized run.
 
 Android status fields to verify:
 
 - `state` should move through `running` to `completed` or `failed`.
 - `health.status` reports the live runtime view (`healthy`, `degraded`, or `down`).
 - `faults.applied` should match the number of executed scenario steps.
+- `faults.events[].in_phase` is captured at injection time (for example, `injecting`) and is no longer overwritten by the final phase.
 - `timeline.first_impact` and `timeline.recovery` are backfilled from observed samples when the live maps are empty.
+- `timeline_status` provides explicit booleans for `impact_observed`, `recovery_observed`, and `impact_pending`.
+- `server_time` provides backend-side clock time for polling consistency.
+- `is_terminal` indicates whether the experiment has reached a terminal lifecycle state.
+- `next_fault_eta_ms` and `next_fault` show the upcoming scheduled fault step, or `-1`/`null` when no pending step remains.
+- `progress.completed_percent_of_plan` is forced to `100` after terminal completion/failure.
 
 Android metrics fields to verify:
 
 - `summary.result` should be `PASS` when the configured expectations are satisfied.
 - `validation.passed` should be `true` when the expectations are configured and met.
 - `recovery.recovered` and `recovery.recovery_time_ms` should now be aligned for normal Android runs; if recovery is detected, the timestamp is backfilled from the sampled state transitions.
+- Planned `foreground_app` scenario steps are treated as orchestrated recovery actions (not external/manual intervention), so `recovery.auto_recovered` remains `true` for successful planned recoveries.
 - `replay_hints` and `state_transitions` should be populated once the app records transitions; empty arrays mean the run did not produce a visible state change.
+- `blast_radius_percent` is derived from Android availability impact (`100 - uptime_percent`) with severity floors for kill/crash/anr events.
+- `cascade_depth` is Android disruption depth: `0` none, `1` degraded-only, `2` hard failure (`not_running`/`crash`/`anr`), `3` includes restart transitions.
 
 ### Frontend
 
@@ -281,6 +291,11 @@ Invoke-RestMethod -Method Post "http://localhost:8000/experiments/backend/stop?i
 ```
 
 ### 3) Android test run
+
+Preflight note:
+
+- If `adb` or emulator tooling is missing at server startup, `/experiments/android/start` returns `400` with `android preflight failed`.
+- In that case, skip Android for that environment and continue backend/frontend API validation.
 
 Upload APK first:
 

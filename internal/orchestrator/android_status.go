@@ -43,6 +43,7 @@ func (o *Orchestrator) GetAndroidStatus(id string) (map[string]interface{}, erro
 	sort.Slice(flat, func(i, j int) bool {
 		return flat[i].Timestamp.Before(flat[j].Timestamp)
 	})
+	history := o.getFaultHistory(id)
 
 	now := time.Now()
 	elapsedMs := now.Sub(exp.CreatedAt).Milliseconds()
@@ -98,6 +99,39 @@ func (o *Orchestrator) GetAndroidStatus(id string) (map[string]interface{}, erro
 			o.mu.Unlock()
 		}
 	}
+
+	if (!hadImpact || len(recovery) == 0) && len(history) > 0 {
+		synthImpact, synthRecovery := synthesizeAndroidTimeline(exp, history, currentState, currentSampleAt, now)
+		if !synthImpact.IsZero() || !synthRecovery.IsZero() {
+			endpoint := androidPrimaryEndpoint(exp, flat)
+			persist := false
+			if !hadImpact && !synthImpact.IsZero() {
+				firstImpact[endpoint] = synthImpact
+				hadImpact = true
+				persist = true
+			}
+			if len(recovery) == 0 && !synthRecovery.IsZero() {
+				recovery[endpoint] = synthRecovery
+				persist = true
+			}
+			if persist {
+				o.mu.Lock()
+				if _, ok := o.firstImpact[id]; !ok {
+					o.firstImpact[id] = make(map[string]time.Time)
+				}
+				if _, ok := o.recoveryAt[id]; !ok {
+					o.recoveryAt[id] = make(map[string]time.Time)
+				}
+				if ts, ok := firstImpact[endpoint]; ok && !ts.IsZero() {
+					o.firstImpact[id][endpoint] = ts
+				}
+				if ts, ok := recovery[endpoint]; ok && !ts.IsZero() {
+					o.recoveryAt[id][endpoint] = ts
+				}
+				o.mu.Unlock()
+			}
+		}
+	}
 	health := "healthy"
 	if currentState == "not_running" || currentState == "crash" || currentState == "anr" {
 		health = "down"
@@ -105,7 +139,6 @@ func (o *Orchestrator) GetAndroidStatus(id string) (map[string]interface{}, erro
 		health = "degraded"
 	}
 
-	history := o.getFaultHistory(id)
 	transitions := make([]map[string]interface{}, 0)
 	prev := ""
 	for _, s := range flat {
@@ -127,11 +160,15 @@ func (o *Orchestrator) GetAndroidStatus(id string) (map[string]interface{}, erro
 
 	faultsApplied := make([]map[string]interface{}, 0, len(history))
 	for _, ev := range history {
+		eventPhase := exp.Phase
+		if strings.TrimSpace(ev.Phase) != "" {
+			eventPhase = models.ExperimentPhase(ev.Phase)
+		}
 		faultsApplied = append(faultsApplied, map[string]interface{}{
 			"type":     ev.Type,
 			"at":       ev.Timestamp,
 			"at_ms":    o.relativeMillis(exp.FaultStartedAt, ev.Timestamp),
-			"in_phase": exp.Phase,
+			"in_phase": eventPhase,
 		})
 	}
 
@@ -146,6 +183,9 @@ func (o *Orchestrator) GetAndroidStatus(id string) (map[string]interface{}, erro
 			progressPercent = 100
 		}
 	}
+	if exp.State == models.StateCompleted || exp.State == models.StateFailed || exp.Phase == models.PhaseCompleted {
+		progressPercent = 100
+	}
 
 	status := map[string]interface{}{
 		"id":                exp.ID,
@@ -153,6 +193,8 @@ func (o *Orchestrator) GetAndroidStatus(id string) (map[string]interface{}, erro
 		"observation_type":  exp.ObservationType,
 		"state":             exp.State,
 		"phase":             exp.Phase,
+		"server_time":       now,
+		"is_terminal":       exp.State == models.StateCompleted || exp.State == models.StateFailed || exp.Phase == models.PhaseCompleted,
 		"created_at":        exp.CreatedAt,
 		"updated_at":        exp.UpdatedAt,
 		"current_state":     currentState,
@@ -178,6 +220,53 @@ func (o *Orchestrator) GetAndroidStatus(id string) (map[string]interface{}, erro
 			"events":    faultsApplied,
 		},
 		"state_transitions": transitions,
+	}
+
+	// Transparency fields for polling clients: when and what the next scheduled fault step is.
+	nextFaultEtaMs := int64(-1)
+	var nextFault map[string]interface{}
+
+	isTerminal, _ := status["is_terminal"].(bool)
+	if !isTerminal && !exp.FaultStartedAt.IsZero() && len(exp.Scenario) > 0 {
+		var nextAt time.Time
+		for _, step := range exp.Scenario {
+			planned := exp.FaultStartedAt.Add(time.Duration(step.At) * time.Second)
+			if !planned.After(now) {
+				continue
+			}
+			if nextAt.IsZero() || planned.Before(nextAt) {
+				nextAt = planned
+				nextFault = map[string]interface{}{
+					"type":       step.Type,
+					"at":         planned,
+					"at_ms":      o.relativeMillis(exp.FaultStartedAt, planned),
+					"in_phase":   exp.Phase,
+					"configured": true,
+				}
+			}
+		}
+		if !nextAt.IsZero() {
+			nextFaultEtaMs = nextAt.Sub(now).Milliseconds()
+		}
+	}
+
+	status["next_fault_eta_ms"] = nextFaultEtaMs
+	status["next_fault"] = nextFault
+
+	impactObserved := len(firstImpact) > 0
+	recoveryObserved := len(recovery) > 0
+	impactPending := !isTerminal && !impactObserved
+	waitingForStep := ""
+	if nextFault != nil {
+		if t, ok := nextFault["type"].(string); ok {
+			waitingForStep = t
+		}
+	}
+	status["timeline_status"] = map[string]interface{}{
+		"impact_observed":   impactObserved,
+		"recovery_observed": recoveryObserved,
+		"impact_pending":    impactPending,
+		"waiting_for_step":  waitingForStep,
 	}
 
 	return status, nil
@@ -223,4 +312,64 @@ func inferAndroidImpactAndRecovery(samples []models.MetricSample, faultStart tim
 	}
 
 	return impact, recovery
+}
+
+func synthesizeAndroidTimeline(exp *models.Experiment, history []FaultEvent, currentState string, currentSampleAt, now time.Time) (time.Time, time.Time) {
+	if exp == nil || len(history) == 0 {
+		return time.Time{}, time.Time{}
+	}
+
+	impact := time.Time{}
+	recovery := time.Time{}
+
+	for _, ev := range history {
+		if !exp.FaultStartedAt.IsZero() && ev.Timestamp.Before(exp.FaultStartedAt) {
+			continue
+		}
+		faultType := strings.ToLower(strings.TrimSpace(ev.Type))
+		if impact.IsZero() && isAndroidImpactFaultType(faultType) {
+			impact = ev.Timestamp
+			continue
+		}
+		if !impact.IsZero() && !ev.Timestamp.Before(impact) && isAndroidRecoveryFaultType(faultType) {
+			recovery = ev.Timestamp
+			break
+		}
+	}
+
+	if !impact.IsZero() && recovery.IsZero() && isAndroidHealthyState(currentState) {
+		if !currentSampleAt.IsZero() && !currentSampleAt.Before(impact) {
+			recovery = currentSampleAt
+		} else if !now.IsZero() && !now.Before(impact) {
+			recovery = now
+		}
+	}
+
+	if !impact.IsZero() && !recovery.IsZero() && recovery.Before(impact) {
+		recovery = time.Time{}
+	}
+
+	return impact, recovery
+}
+
+func isAndroidImpactFaultType(t string) bool {
+	switch t {
+	case "kill_app", "kill_repeated", "network_disable", "network_flaky", "network_latency", "network_loss", "background_app", "clear_data", "revoke_camera", "revoke_storage", "revoke_location":
+		return true
+	default:
+		return false
+	}
+}
+
+func isAndroidRecoveryFaultType(t string) bool {
+	switch t {
+	case "network_enable", "foreground_app":
+		return true
+	default:
+		return false
+	}
+}
+
+func isAndroidHealthyState(state string) bool {
+	return state == "running"
 }

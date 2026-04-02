@@ -130,12 +130,28 @@ func (o *Orchestrator) getAndroidMetrics(id string) map[string]interface{} {
 		// refined below once induced vs intrinsic kill cause is known
 	}
 
+	currentSampleAt := time.Time{}
+	if len(flat) > 0 {
+		currentSampleAt = flat[len(flat)-1].Timestamp
+	}
+
+	faultHistory := o.getFaultHistory(id)
+
 	crashRate := 0.0
 	uptimePercent := 0.0
 	if total > 0 {
 		crashRate = float64(crashCount) / float64(total) * 100
 		uptimePercent = float64(runningCount) / float64(total) * 100
 	}
+
+	blastRadiusPercent, cascadeDepth := computeAndroidImpactMetrics(
+		uptimePercent,
+		hadIncident,
+		hadNotRunning,
+		hadCrashState,
+		anr,
+		unexpectedRestarts,
+	)
 
 	failureType := "healthy"
 	if crashRate > 0 || hadCrashState {
@@ -162,6 +178,15 @@ func (o *Orchestrator) getAndroidMetrics(id string) map[string]interface{} {
 	firstImpactAt, recoveryAt := findImpactAndRecoveryFromTransitions(transitions)
 	if firstImpactAt.IsZero() && len(flat) > 0 {
 		firstImpactAt, recoveryAt = inferAndroidImpactAndRecovery(flat, exp.FaultStartedAt)
+	}
+	if firstImpactAt.IsZero() || recoveryAt.IsZero() {
+		synthImpact, synthRecovery := synthesizeAndroidTimeline(exp, faultHistory, previousState, currentSampleAt, time.Now())
+		if firstImpactAt.IsZero() {
+			firstImpactAt = synthImpact
+		}
+		if recoveryAt.IsZero() {
+			recoveryAt = synthRecovery
+		}
 	}
 	if !firstImpactAt.IsZero() || !recoveryAt.IsZero() {
 		o.mu.Lock()
@@ -199,7 +224,6 @@ func (o *Orchestrator) getAndroidMetrics(id string) map[string]interface{} {
 		}
 	}
 
-	faultHistory := o.getFaultHistory(id)
 	scenarioLabel := deriveAndroidScenarioLabel(exp, faultHistory)
 
 	recovered, recoveryAtResolved := hasRecoveredAfterImpact(firstImpactAt, recoveryCopy)
@@ -235,7 +259,7 @@ func (o *Orchestrator) getAndroidMetrics(id string) map[string]interface{} {
 		}
 	}
 
-	autoRecovered := recovered && !wasRecoveryExternallyTriggered(faultHistory, firstImpactAt, recoveryAtResolved)
+	autoRecovered := recovered && !wasRecoveryExternallyTriggered(exp, faultHistory, firstImpactAt, recoveryAtResolved)
 
 	if crashReason == "" && failureType != "healthy" {
 		cause := o.probableCause(id, firstImpactCopy)
@@ -437,6 +461,12 @@ func (o *Orchestrator) getAndroidMetrics(id string) map[string]interface{} {
 			"manual_intervention_required": manualIntervention,
 			"running":                      runningNow,
 		},
+		"impact": map[string]interface{}{
+			"app_availability_percent": uptimePercent,
+			"blast_radius_percent":     blastRadiusPercent,
+			"cascade_depth":            cascadeDepth,
+			"disruption_events":        len(transitions),
+		},
 		"crash_classification": crashClassCounts,
 		"validation":           validation,
 		"summary": map[string]interface{}{
@@ -452,9 +482,39 @@ func (o *Orchestrator) getAndroidMetrics(id string) map[string]interface{} {
 			"recovery":     recoveryCopy,
 		},
 		"resilience_threshold": resilience,
-		"blast_radius_percent": 0,
-		"cascade_depth":        0,
+		"blast_radius_percent": blastRadiusPercent,
+		"cascade_depth":        cascadeDepth,
 	}
+}
+
+func computeAndroidImpactMetrics(
+	uptimePercent float64,
+	hadIncident bool,
+	hadNotRunning bool,
+	hadCrashState bool,
+	anr bool,
+	unexpectedRestarts int,
+) (float64, int) {
+	blast := clamp(100-uptimePercent, 0, 100)
+	depth := 0
+
+	if hadIncident {
+		depth = 1
+	}
+	if hadNotRunning || hadCrashState || anr {
+		depth = 2
+		if blast < 25 {
+			blast = 25
+		}
+	}
+	if unexpectedRestarts > 0 {
+		depth = 3
+		if blast < 35 {
+			blast = 35
+		}
+	}
+
+	return blast, depth
 }
 
 func hasStableRecovery(samples []models.MetricSample, since time.Time, window time.Duration) (bool, time.Time) {
@@ -556,7 +616,7 @@ func findImpactAndRecoveryFromTransitions(transitions []androidTransition) (time
 	return impact, recovery
 }
 
-func wasRecoveryExternallyTriggered(history []FaultEvent, impactAt, recoveryAt time.Time) bool {
+func wasRecoveryExternallyTriggered(exp *models.Experiment, history []FaultEvent, impactAt, recoveryAt time.Time) bool {
 	if impactAt.IsZero() || recoveryAt.IsZero() {
 		return false
 	}
@@ -571,10 +631,38 @@ func wasRecoveryExternallyTriggered(history []FaultEvent, impactAt, recoveryAt t
 		if ev.Timestamp.After(recoveryAt.Add(2 * time.Second)) {
 			continue
 		}
+		if isPlannedForegroundRecoveryStep(exp, ev.Timestamp) {
+			continue
+		}
 		return true
 	}
 
 	return false
+}
+
+func isPlannedForegroundRecoveryStep(exp *models.Experiment, observedAt time.Time) bool {
+	if exp == nil || exp.FaultStartedAt.IsZero() {
+		return false
+	}
+
+	for _, step := range exp.Scenario {
+		if step.Type != "foreground_app" {
+			continue
+		}
+		plannedAt := exp.FaultStartedAt.Add(time.Duration(step.At) * time.Second)
+		if absDuration(observedAt.Sub(plannedAt)) <= 3*time.Second {
+			return true
+		}
+	}
+
+	return false
+}
+
+func absDuration(d time.Duration) time.Duration {
+	if d < 0 {
+		return -d
+	}
+	return d
 }
 
 func failureReason(failureType string, recovered bool, autoRecovered bool) string {

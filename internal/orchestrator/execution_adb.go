@@ -2,6 +2,8 @@ package orchestrator
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -10,18 +12,25 @@ import (
 )
 
 func (o *Orchestrator) setupAndroid(id string, options *AndroidRunOptions, app *AndroidAppConfig) (*adb.Client, error) {
+	if msg := o.androidStartupReadinessError(); msg != "" {
+		return nil, fmt.Errorf("%s", msg)
+	}
+
 	if app == nil {
 		app = &AndroidAppConfig{APKPath: o.apkPath, Package: o.pkg, Activity: o.activity}
+	}
+	if strings.TrimSpace(app.APKPath) == "" {
+		return nil, fmt.Errorf("android setup failed: missing APK path")
+	}
+	if _, err := os.Stat(app.APKPath); err != nil {
+		return nil, fmt.Errorf("android setup failed: APK not found at %q", app.APKPath)
 	}
 
 	deviceID := o.emulatorDeviceID
 	if strings.TrimSpace(deviceID) == "" {
 		deviceID = "emulator-5554"
 	}
-
 	adbClient := adb.NewClient(deviceID, o.adbPath)
-
-	_ = adbClient.StartServer()
 
 	avdName := o.emulatorAVDName
 	if strings.TrimSpace(avdName) == "" {
@@ -132,4 +141,22 @@ func (o *Orchestrator) killEmulator(adbClient *adb.Client) error {
 	o.mu.Unlock()
 
 	return err
+}
+
+func resolveExecutablePath(configured string, fallback string) (string, error) {
+	p := strings.TrimSpace(configured)
+	if p == "" {
+		p = fallback
+	}
+	if strings.TrimSpace(p) == "" {
+		return "", fmt.Errorf("no executable configured")
+	}
+	if _, err := os.Stat(p); err == nil {
+		return p, nil
+	}
+	resolved, err := exec.LookPath(p)
+	if err != nil {
+		return "", fmt.Errorf("executable %q not found", p)
+	}
+	return resolved, nil
 }

@@ -46,6 +46,9 @@ type Orchestrator struct {
 
 	frontendMetrics map[string][]models.FrontendMetrics
 
+	androidReady      bool
+	androidReadyError string
+
 	mu sync.Mutex
 }
 
@@ -54,7 +57,7 @@ func NewOrchestrator(
 	adbPath, emulatorPath, apkPath, pkg, activity string,
 ) *Orchestrator {
 
-	return &Orchestrator{
+	orch := &Orchestrator{
 		experiments:    make(map[string]*models.Experiment),
 		monitors:       make(map[string]monitoring.MonitorInterface),
 		metrics:        make(map[string]map[string][]models.MetricSample),
@@ -81,5 +84,10 @@ func NewOrchestrator(
 		emulatorDeviceID: "emulator-5554",
 		emulatorAVDName:  "Pixel_8a",
 		frontendMetrics:  make(map[string][]models.FrontendMetrics),
+		androidReady:     true,
 	}
+
+	orch.initAndroidPreflight()
+
+	return orch
 }
