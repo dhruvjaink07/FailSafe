@@ -177,6 +177,15 @@ func (f *fakeExperimentService) GetFrontendMetrics(id string) (interface{}, erro
 	}, nil
 }
 
+func (f *fakeExperimentService) GetFrontendFaultCommand(id string) (map[string]interface{}, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.experiments[id]; !ok {
+		return nil, fmt.Errorf("experiment not found")
+	}
+	return map[string]interface{}{"active": false}, nil
+}
+
 func (f *fakeExperimentService) AddFrontendMetrics(data []models.FrontendMetrics) {}
 
 func newTestMux(orch ExperimentService) *http.ServeMux {
@@ -199,6 +208,7 @@ func newTestMux(orch ExperimentService) *http.ServeMux {
 	mux.HandleFunc("/experiments/frontend/status", ExperimentFrontendStatusHandler(orch))
 	mux.HandleFunc("/experiments/frontend/stop", ExperimentFrontendStopHandler(orch))
 	mux.HandleFunc("/experiments/frontend/metrics", ExperimentFrontendMetricsHandler(orch))
+	mux.HandleFunc("/experiments/frontend/fault-command", ExperimentFrontendFaultCommandHandler(orch))
 
 	return mux
 }
@@ -417,6 +427,13 @@ func TestFrontendLifecycleConnectivity(t *testing.T) {
 		t.Fatalf("expected metrics 200, got %d: %s", metricsRes.Code, metricsRes.Body.String())
 	}
 
+	commandRes := httptest.NewRecorder()
+	commandReq := httptest.NewRequest(http.MethodGet, "/experiments/frontend/fault-command?id="+started.ID, nil)
+	mux.ServeHTTP(commandRes, commandReq)
+	if commandRes.Code != http.StatusOK {
+		t.Fatalf("expected frontend fault-command 200, got %d: %s", commandRes.Code, commandRes.Body.String())
+	}
+
 	var metrics map[string]interface{}
 	if err := json.Unmarshal(metricsRes.Body.Bytes(), &metrics); err != nil {
 		t.Fatalf("failed to decode metrics response: %v", err)
@@ -427,6 +444,71 @@ func TestFrontendLifecycleConnectivity(t *testing.T) {
 	}
 	if len(frontendRaw) == 0 {
 		t.Fatal("expected at least one frontend metric sample")
+	}
+
+	stopRes := httptest.NewRecorder()
+	stopReq := httptest.NewRequest(http.MethodPost, "/experiments/frontend/stop?id="+started.ID, nil)
+	mux.ServeHTTP(stopRes, stopReq)
+	if stopRes.Code != http.StatusOK {
+		t.Fatalf("expected stop 200, got %d: %s", stopRes.Code, stopRes.Body.String())
+	}
+}
+
+func TestFrontendFaultCommandActiveDuringInjecting(t *testing.T) {
+	orch := orchestrator.NewOrchestrator(nil, "", "", "", "", "")
+	mux := newTestMux(orch)
+
+	startBody := map[string]interface{}{
+		"fault_type":   "network_delay",
+		"target_type":  "frontend",
+		"duration":     20,
+		"frontend_run": map[string]interface{}{"base_url": "https://example.com"},
+	}
+	startReq := mustJSONRequest(t, http.MethodPost, "/experiments/frontend/start", startBody)
+	startRes := httptest.NewRecorder()
+	mux.ServeHTTP(startRes, startReq)
+	if startRes.Code != http.StatusOK {
+		t.Fatalf("expected start 200, got %d: %s", startRes.Code, startRes.Body.String())
+	}
+
+	var started models.Experiment
+	if err := json.Unmarshal(startRes.Body.Bytes(), &started); err != nil {
+		t.Fatalf("failed to decode start response: %v", err)
+	}
+
+	deadline := time.Now().Add(20 * time.Second)
+	activeSeen := false
+
+	for time.Now().Before(deadline) {
+		statusRes := httptest.NewRecorder()
+		statusReq := httptest.NewRequest(http.MethodGet, "/experiments/frontend/status?id="+started.ID, nil)
+		mux.ServeHTTP(statusRes, statusReq)
+		if statusRes.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d: %s", statusRes.Code, statusRes.Body.String())
+		}
+
+		commandRes := httptest.NewRecorder()
+		commandReq := httptest.NewRequest(http.MethodGet, "/experiments/frontend/fault-command?id="+started.ID, nil)
+		mux.ServeHTTP(commandRes, commandReq)
+		if commandRes.Code != http.StatusOK {
+			t.Fatalf("expected frontend fault-command 200, got %d: %s", commandRes.Code, commandRes.Body.String())
+		}
+
+		var commandPayload map[string]interface{}
+		if err := json.Unmarshal(commandRes.Body.Bytes(), &commandPayload); err != nil {
+			t.Fatalf("failed to decode command response: %v", err)
+		}
+
+		if active, ok := commandPayload["active"].(bool); ok && active {
+			activeSeen = true
+			break
+		}
+
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	if !activeSeen {
+		t.Fatalf("expected active frontend fault command during injecting window for experiment %s", started.ID)
 	}
 
 	stopRes := httptest.NewRecorder()

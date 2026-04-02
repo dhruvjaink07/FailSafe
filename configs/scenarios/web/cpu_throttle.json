@@ -1,0 +1,26 @@
+{
+  "name": "cpu_throttle",
+  "description": "CPU throttling scenario with 4x slowdown",
+  "pages": [
+    {
+      "path": "/",
+      "actions": ["wait:1500", "click:button.interactive", "wait:2000"]
+    },
+    {
+      "path": "/dashboard",
+      "actions": ["wait:2000", "scroll:bottom", "wait:1500"]
+    }
+  ],
+  "phases": {
+    "baselineMs": 5000,
+    "injectingMs": 12000,
+    "recoveryMs": 5000
+  },
+  "chaos": {
+    "enabled": true,
+    "networkDelayMs": 0,
+    "failureRate": 0,
+    "cpuSlowdownRate": 4,
+    "targetUrls": [""]
+  }
+}

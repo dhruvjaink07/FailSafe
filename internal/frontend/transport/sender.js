@@ -1,129 +1,81 @@
-// ===== FAILSAFE TRANSPORT LAYER =====
+"use strict";
 
-// CONFIG (can be overridden)
-const DEFAULT_CONFIG = {
-  endpoint: "http://localhost:8080/failsafe/frontend-metrics",
-  batchSize: 10,
-  flushInterval: 5000,
-  retryLimit: 3,
-  retryDelay: 1000,
-};
+(function initFailSafeSender(globalObj) {
+  function createSender(options) {
+    var cfg = Object.assign(
+      {
+        endpoint: "http://localhost:8000/frontend/metrics",
+        batchSize: 10,
+        flushIntervalMs: 5000,
+        retryLimit: 3,
+      },
+      options || {}
+    );
 
-// INTERNAL STATE
-let config = { ...DEFAULT_CONFIG };
+    var state = {
+      queue: [],
+      flushing: false,
+    };
 
-let queue = [];
-let isFlushing = false;
-
-// ===== INIT =====
-export function initFailsafeTransport(customConfig = {}) {
-  config = { ...config, ...customConfig };
-
-  startAutoFlush();
-
-  console.log("FailSafe Transport Initialized");
-}
-
-// ===== ENQUEUE =====
-export function enqueueMetric(payload) {
-  queue.push({
-    payload,
-    retries: 0,
-  });
-
-  if (queue.length >= config.batchSize) {
-    flush();
-  }
-}
-
-// ===== AUTO FLUSH =====
-function startAutoFlush() {
-  setInterval(() => {
-    flush();
-  }, config.flushInterval);
-}
-
-// ===== FLUSH =====
-async function flush() {
-
-  if (isFlushing || queue.length === 0) return;
-
-  isFlushing = true;
-
-  const batch = queue.splice(0, config.batchSize);
-
-  try {
-    await sendBatch(batch.map(item => item.payload));
-  } catch (err) {
-    handleFailure(batch);
-  }
-
-  isFlushing = false;
-}
-
-// ===== SEND =====
-async function sendBatch(batch) {
-
-  const body = JSON.stringify({
-    metrics: batch,
-  });
-
-  // try sendBeacon first (non-blocking, survives unload)
-  if (navigator.sendBeacon) {
-    const blob = new Blob([body], { type: "application/json" });
-    const success = navigator.sendBeacon(config.endpoint, blob);
-
-    if (success) return;
-  }
-
-  // fallback to fetch
-  const res = await fetch(config.endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body,
-    keepalive: true,
-  });
-
-  if (!res.ok) {
-    throw new Error("Failed to send metrics");
-  }
-}
-
-// ===== FAILURE HANDLING =====
-function handleFailure(batch) {
-
-  for (const item of batch) {
-
-    if (item.retries < config.retryLimit) {
-      item.retries++;
-
-      // exponential backoff
-      setTimeout(() => {
-        queue.push(item);
-      }, config.retryDelay * item.retries);
-
+    function enqueue(payload) {
+      state.queue.push({ payload: payload, retries: 0 });
+      if (state.queue.length >= cfg.batchSize) {
+        void flush();
+      }
     }
-    // else drop silently
+
+    async function flush() {
+      if (state.flushing || state.queue.length === 0) {
+        return;
+      }
+
+      state.flushing = true;
+      var batch = state.queue.splice(0, cfg.batchSize);
+
+      try {
+        await postBatch(batch.map(function (item) { return item.payload; }));
+      } catch (_) {
+        requeue(batch);
+      } finally {
+        state.flushing = false;
+      }
+    }
+
+    async function postBatch(metrics) {
+      var response = await fetch(cfg.endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ metrics: metrics }),
+        keepalive: true,
+      });
+
+      if (!response.ok) {
+        throw new Error("frontend metrics post failed");
+      }
+    }
+
+    function requeue(batch) {
+      batch.forEach(function (item) {
+        if (item.retries >= cfg.retryLimit) {
+          return;
+        }
+
+        item.retries += 1;
+        setTimeout(function () {
+          state.queue.push(item);
+        }, 500 * item.retries);
+      });
+    }
+
+    setInterval(function () {
+      void flush();
+    }, cfg.flushIntervalMs);
+
+    return {
+      enqueue: enqueue,
+      flush: flush,
+    };
   }
-}
 
-// ===== FORCE FLUSH =====
-export function forceFlush() {
-  return flush();
-}
-
-// ===== VISIBILITY / UNLOAD HANDLING =====
-
-// flush when tab hidden
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "hidden") {
-    flush();
-  }
-});
-
-// flush before unload
-window.addEventListener("beforeunload", () => {
-  flush();
-});
+  globalObj.__FAILSAFE_CREATE_SENDER__ = createSender;
+})(window);

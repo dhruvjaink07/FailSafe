@@ -1,33 +1,19 @@
-# Frontend Testing Integration Guide
+# Frontend Web Testing Integration Guide
 
 ## Goal
 
-Provide a predictable UI flow for uploading an APK, running a resilience scenario, polling status, and rendering final results.
+Test resilience and performance of target web pages (external site or app URL) under controlled frontend faults.
 
-## Recommended UI Flow
+This flow is for web page testing only. It does not require APK upload, Android emulator fields, or dashboard-specific steps.
 
-1. Upload APK.
-2. Build experiment payload.
-3. Start experiment.
-4. Poll Android status endpoint every 2 seconds.
-5. On terminal state, fetch full metrics.
-6. Render summary, timeline, and validation reasons.
+## End-to-End Flow
 
-## Step 1: Upload APK
+1. Start a frontend experiment with web runtime config.
+2. Run the Playwright collector runner for the same experiment id.
+3. Poll frontend status until terminal state.
+4. Fetch frontend metrics report and render results.
 
-Endpoint:
-
-```http
-POST /upload/apk
-```
-
-Store returned fields for run:
-
-- `apk` (id)
-- `package`
-- `activity`
-
-## Step 2: Start Experiment
+## Step 1: Start Frontend Experiment
 
 Endpoint:
 
@@ -35,12 +21,52 @@ Endpoint:
 POST /experiments/frontend/start
 ```
 
-Frontend payload should include:
+Minimum payload:
 
-- scenario steps
-- expected validation contract
-- `apk` upload id
-- emulator mode (`android_run.headless`)
+```json
+{
+  "fault_type": "latency",
+  "target_type": "frontend",
+  "duration_seconds": 30,
+  "frontend_run": {
+    "base_url": "https://example.com",
+    "metrics_endpoint": "http://localhost:8000/frontend/metrics",
+    "target_urls": ["/api/"]
+  }
+}
+```
+
+Required web fields:
+
+- `target_type`: `frontend`
+- `frontend_run.base_url`: target site URL for browser run
+
+## Step 2: Run Browser Collector
+
+From repo root:
+
+```powershell
+$env:EXPERIMENT_ID="<experiment-id-from-start-response>"
+node internal/frontend/automation/playwright/runner.js
+```
+
+Legacy compatibility command:
+
+```powershell
+node playwright/runner.js
+```
+
+Optional overrides:
+
+- `BASE_URL`
+- `FAILSAFE_FRONTEND_ENDPOINT`
+- `FAILSAFE_CONTROLLER_URL`
+
+If `BASE_URL` and `FAILSAFE_FRONTEND_ENDPOINT` are not set, the runner resolves runtime config from:
+
+```http
+GET /experiments/frontend/status?id={experiment_id}
+```
 
 ## Step 3: Poll Live Status
 
@@ -50,15 +76,13 @@ Endpoint:
 GET /experiments/frontend/status?id={experiment_id}
 ```
 
-Poll interval:
+Recommended interval:
 
-- 2 seconds (recommended)
+- 2 seconds
 
-Stop polling when:
+Stop polling when `state` is `completed` or `failed`.
 
-- `state` is `completed` or `failed`
-
-## Step 4: Fetch Final Report
+## Step 4: Fetch Metrics Report
 
 Endpoint:
 
@@ -66,46 +90,51 @@ Endpoint:
 GET /experiments/frontend/metrics?id={experiment_id}
 ```
 
-Use this for full charts and post-run report pages.
+Use this payload for charts and summary cards.
 
-## Suggested UI Sections
+## Collector Ingest Contract
 
-### Run Header
+Browser collector posts batches to:
 
-- experiment id
-- phase/state badges
-- scenario label
+```http
+POST /frontend/metrics
+```
 
-### Health and Recovery
+Batch body shape:
 
-- failure type
-- severity
-- status
-- recovered / auto_recovered / stable_recovered
-- recovery time
+```json
+{
+  "metrics": [
+    {
+      "experiment_id": "exp-123",
+      "phase": "baseline",
+      "page": "/",
+      "metrics": {
+        "lcp": 1200,
+        "cls": 0.04,
+        "inp": 90,
+        "long_tasks": 1,
+        "errors": 0,
+        "unhandled_rejections": 0
+      },
+      "api_calls": [
+        { "url": "/api/users", "duration": 140, "status": 200 }
+      ],
+      "timestamp": 1712000000000
+    }
+  ]
+}
+```
 
-### Timeline
+## UI Rendering Suggestions
 
-- fault start
-- first impact
-- recovery
-- replay hints list
+- Run header: experiment id, state, phase.
+- Vitals: LCP, CLS, INP by phase.
+- Stability: long tasks, JS errors, unhandled rejections.
+- API quality: success/error rates and latency percentiles.
+- Recovery: baseline vs injecting vs recovery deltas.
 
-### Validation
+## Notes
 
-- configured or not
-- passed state
-- reasons list
-
-### Samples and Aggregates
-
-- metrics sample count
-- uptime percent
-- crash rate percent
-- warning signals
-
-## Frontend Contract Notes
-
-- If `validation.passed` is `null`, treat as observational run (no strict expectation configured).
-- `recovered=true` can still be `auto_recovered=false` when recovery needed external trigger.
-- `stable_recovered=false` means the app came back but has not met stability window criteria.
+- Keep frontend testing scoped to target page behavior under faults.
+- Android and APK workflows are separate and should not be mixed into this flow.

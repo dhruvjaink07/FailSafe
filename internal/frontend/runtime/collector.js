@@ -1,217 +1,183 @@
-// ===== FAILSAFE COLLECTOR (FINAL - INTEGRATED) =====
+"use strict";
 
-import { enqueueMetric, initFailsafeTransport } from "./sender.js";
+(function initFailSafeCollector(globalObj) {
+  if (globalObj.__FAILSAFE_COLLECTOR_INSTALLED__) {
+    return;
+  }
+  globalObj.__FAILSAFE_COLLECTOR_INSTALLED__ = true;
 
-// ===== CONFIG =====
-const BATCH_INTERVAL = 5000;
+  var senderFactory = globalObj.__FAILSAFE_CREATE_SENDER__;
+  if (typeof senderFactory !== "function") {
+    return;
+  }
 
-// ===== INIT TRANSPORT =====
-initFailsafeTransport();
+  var sender = senderFactory({
+    endpoint: globalObj.__FAILSAFE_ENDPOINT__ || "http://localhost:8000/frontend/metrics",
+  });
 
-// ===== CONTEXT =====
-function getExperimentId() {
-  return window.__FAILSAFE_EXPERIMENT_ID__ || "local-dev";
-}
+  function getExperimentId() {
+    return globalObj.__FAILSAFE_EXPERIMENT_ID__ || "exp-live-1";
+  }
 
-function getPhase() {
-  return window.__FAILSAFE_PHASE__ || "baseline";
-}
+  function getPhase() {
+    return globalObj.__FAILSAFE_PHASE__ || "baseline";
+  }
 
-// ===== STATE =====
-let state = resetState();
+  function resetState() {
+    return {
+      page: location.pathname || "/",
+      lcp: 0,
+      cls: 0,
+      inp: 0,
+      longTasks: 0,
+      errors: 0,
+      unhandledRejections: 0,
+      apiCalls: [],
+      clsSessionValue: 0,
+      clsLastTimestamp: 0,
+      lcpFinal: false,
+    };
+  }
 
-// ===== RESET STATE PER PAGE =====
-function resetState() {
-  return {
-    page: location.pathname,
-    lcp: 0,
-    cls: 0,
-    inp: 0,
+  var state = resetState();
 
-    longTasks: 0,
-    errors: 0,
-    unhandledRejections: 0,
+  if (typeof globalObj.__FAILSAFE_BOOTSTRAP_RUNTIME__ === "function") {
+    globalObj.__FAILSAFE_BOOTSTRAP_RUNTIME__(state);
+  }
 
-    apiCalls: [],
-
-    clsSessionValue: 0,
-    clsSessionEntries: [],
-    clsLastTimestamp: 0,
-
-    lcpFinal: false,
-  };
-}
-
-// ===== PERFORMANCE OBSERVER =====
-const observer = new PerformanceObserver((list) => {
-  for (const entry of list.getEntries()) {
-
-    // LCP
-    if (entry.entryType === "largest-contentful-paint") {
-      if (!state.lcpFinal) {
+  var perfObserver = new PerformanceObserver(function (list) {
+    list.getEntries().forEach(function (entry) {
+      if (entry.entryType === "largest-contentful-paint" && !state.lcpFinal) {
         state.lcp = entry.startTime;
       }
-    }
 
-    // CLS (session window)
-    if (entry.entryType === "layout-shift" && !entry.hadRecentInput) {
-      const now = entry.startTime;
-
-      if (
-        now - state.clsLastTimestamp > 1000 ||
-        state.clsSessionValue > 5
-      ) {
-        state.clsSessionValue = 0;
-        state.clsSessionEntries = [];
+      if (entry.entryType === "layout-shift" && !entry.hadRecentInput) {
+        var now = entry.startTime;
+        if (now - state.clsLastTimestamp > 1000 || state.clsSessionValue > 5) {
+          state.clsSessionValue = 0;
+        }
+        state.clsSessionValue += entry.value;
+        state.clsLastTimestamp = now;
+        state.cls = Math.max(state.cls, state.clsSessionValue);
       }
 
-      state.clsSessionValue += entry.value;
-      state.clsSessionEntries.push(entry);
-      state.clsLastTimestamp = now;
-
-      state.cls = Math.max(state.cls, state.clsSessionValue);
-    }
-
-    // Long task
-    if (entry.entryType === "longtask") {
-      state.longTasks += 1;
-    }
-  }
-});
-
-observer.observe({
-  entryTypes: ["largest-contentful-paint", "layout-shift", "longtask"],
-});
-
-// ===== FINALIZE LCP =====
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "hidden") {
-    state.lcpFinal = true;
-  }
-});
-
-// ===== INP =====
-try {
-  const inpObserver = new PerformanceObserver((list) => {
-    for (const entry of list.getEntries()) {
-      if (entry.duration > state.inp) {
-        state.inp = entry.duration;
+      if (entry.entryType === "longtask") {
+        state.longTasks += 1;
       }
-    }
+    });
   });
 
-  inpObserver.observe({
-    type: "event",
-    buffered: true,
-    durationThreshold: 40,
+  perfObserver.observe({
+    entryTypes: ["largest-contentful-paint", "layout-shift", "longtask"],
   });
-} catch {}
-
-// ===== ERROR TRACKING =====
-window.addEventListener("error", () => {
-  state.errors += 1;
-});
-
-window.addEventListener("unhandledrejection", () => {
-  state.unhandledRejections += 1;
-});
-
-// ===== FETCH INTERCEPTOR =====
-const originalFetch = window.fetch;
-
-window.fetch = async function (...args) {
-  const start = performance.now();
 
   try {
-    const res = await originalFetch(...args);
-
-    const duration = performance.now() - start;
-
-    state.apiCalls.push({
-      url: args[0],
-      duration,
-      status: res.status,
+    var inpObserver = new PerformanceObserver(function (list) {
+      list.getEntries().forEach(function (entry) {
+        if (entry.duration > state.inp) {
+          state.inp = entry.duration;
+        }
+      });
     });
 
-    return res;
-
-  } catch (err) {
-    const duration = performance.now() - start;
-
-    state.apiCalls.push({
-      url: args[0],
-      duration,
-      status: 0,
+    inpObserver.observe({
+      type: "event",
+      buffered: true,
+      durationThreshold: 40,
     });
-
-    throw err;
+  } catch (_) {
+    // Unsupported on some pages.
   }
-};
 
-// ===== SPA NAVIGATION =====
-const originalPushState = history.pushState;
-history.pushState = function (...args) {
-  originalPushState.apply(this, args);
-  onRouteChange();
-};
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "hidden") {
+      state.lcpFinal = true;
+    }
+  });
 
-const originalReplaceState = history.replaceState;
-history.replaceState = function (...args) {
-  originalReplaceState.apply(this, args);
-  onRouteChange();
-};
+  globalObj.addEventListener("error", function () {
+    state.errors += 1;
+  });
 
-window.addEventListener("popstate", onRouteChange);
+  globalObj.addEventListener("unhandledrejection", function () {
+    state.unhandledRejections += 1;
+  });
 
-function onRouteChange() {
-  flushMetrics();
-  state = resetState();
-}
-
-// ===== PAYLOAD =====
-function buildPayload() {
-  return {
-    experiment_id: getExperimentId(),
-    phase: getPhase(),
-    page: state.page,
-
-    metrics: {
-      lcp: Math.round(state.lcp),
-      cls: Number(state.cls.toFixed(4)),
-      inp: Math.round(state.inp),
-
-      long_tasks: state.longTasks,
-      errors: state.errors,
-      unhandled_rejections: state.unhandledRejections,
-    },
-
-    api_calls: state.apiCalls,
-    timestamp: Date.now(),
+  var originalFetch = globalObj.fetch;
+  globalObj.fetch = async function failsafeFetch() {
+    var args = Array.prototype.slice.call(arguments);
+    var started = performance.now();
+    try {
+      var res = await originalFetch.apply(globalObj, args);
+      state.apiCalls.push({
+        url: String(args[0] || ""),
+        duration: performance.now() - started,
+        status: res.status,
+      });
+      return res;
+    } catch (err) {
+      state.apiCalls.push({
+        url: String(args[0] || ""),
+        duration: performance.now() - started,
+        status: 0,
+      });
+      throw err;
+    }
   };
-}
 
-// ===== FLUSH =====
-function flushMetrics() {
-  const payload = buildPayload();
-  enqueueMetric(payload);
-}
+  function buildPayload() {
+    return {
+      experiment_id: getExperimentId(),
+      phase: getPhase(),
+      page: state.page,
+      metrics: {
+        lcp: Math.round(state.lcp),
+        cls: Number(state.cls.toFixed(4)),
+        inp: Math.round(state.inp),
+        long_tasks: state.longTasks,
+        errors: state.errors,
+        unhandled_rejections: state.unhandledRejections,
+      },
+      api_calls: state.apiCalls,
+      timestamp: Date.now(),
+    };
+  }
 
-// expose for runner
-window.__FAILSAFE_FLUSH__ = function () {
-  flushMetrics();
-};
+  function flush() {
+    sender.enqueue(buildPayload());
+    state.longTasks = 0;
+    state.errors = 0;
+    state.unhandledRejections = 0;
+    state.apiCalls = [];
+  }
 
-// ===== PERIODIC =====
-setInterval(() => {
-  flushMetrics();
+  var originalPushState = history.pushState;
+  history.pushState = function failsafePushState() {
+    var args = Array.prototype.slice.call(arguments);
+    originalPushState.apply(history, args);
+    flush();
+    state = resetState();
+  };
 
-  // reset volatile metrics only
-  state.longTasks = 0;
-  state.apiCalls = [];
-  state.errors = 0;
-  state.unhandledRejections = 0;
+  var originalReplaceState = history.replaceState;
+  history.replaceState = function failsafeReplaceState() {
+    var args = Array.prototype.slice.call(arguments);
+    originalReplaceState.apply(history, args);
+    flush();
+    state = resetState();
+  };
 
-}, BATCH_INTERVAL);
+  globalObj.addEventListener("popstate", function () {
+    flush();
+    state = resetState();
+  });
 
-// ===== BOOT =====
-console.log("FailSafe Collector (final) running");
+  globalObj.__FAILSAFE_FLUSH__ = function failsafeForceFlush() {
+    flush();
+    return sender.flush();
+  };
+
+  setInterval(function () {
+    flush();
+  }, 5000);
+})(window);

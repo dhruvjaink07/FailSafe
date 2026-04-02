@@ -1,0 +1,27 @@
+{
+  "name": "offline",
+  "description": "Offline fault injection scenario",
+  "pages": [
+    {
+      "path": "/",
+      "actions": ["wait:1000"]
+    },
+    {
+      "path": "/cached",
+      "actions": ["wait:1000", "click:button.retry", "wait:1500"]
+    }
+  ],
+  "phases": {
+    "baselineMs": 5000,
+    "injectingMs": 8000,
+    "recoveryMs": 5000
+  },
+  "chaos": {
+    "enabled": true,
+    "networkDelayMs": 0,
+    "failureRate": 1.0,
+    "offline": true,
+    "cpuSlowdownRate": 1,
+    "targetUrls": [""]
+  }
+}

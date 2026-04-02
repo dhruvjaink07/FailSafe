@@ -1,0 +1,26 @@
+{
+  "name": "latency",
+  "description": "High network latency scenario with 700ms delays",
+  "pages": [
+    {
+      "path": "/",
+      "actions": ["wait:1500", "click:button.primary", "wait:2000"]
+    },
+    {
+      "path": "/products",
+      "actions": ["wait:1500", "scroll:bottom", "wait:1000"]
+    }
+  ],
+  "phases": {
+    "baselineMs": 5000,
+    "injectingMs": 15000,
+    "recoveryMs": 5000
+  },
+  "chaos": {
+    "enabled": true,
+    "networkDelayMs": 700,
+    "failureRate": 0.1,
+    "cpuSlowdownRate": 1,
+    "targetUrls": [""]
+  }
+}

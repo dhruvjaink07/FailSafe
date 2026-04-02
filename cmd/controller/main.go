@@ -58,6 +58,7 @@ func main() {
 	http.HandleFunc("/experiments/frontend/status", handlers.ExperimentFrontendStatusHandler(orch))
 	http.HandleFunc("/experiments/frontend/stop", handlers.ExperimentFrontendStopHandler(orch))
 	http.HandleFunc("/experiments/frontend/metrics", handlers.ExperimentFrontendMetricsHandler(orch))
+	http.HandleFunc("/experiments/frontend/fault-command", handlers.ExperimentFrontendFaultCommandHandler(orch))
 
 	log.Println("Server running on :8000")
 	log.Fatal(http.ListenAndServe(":8000", nil))

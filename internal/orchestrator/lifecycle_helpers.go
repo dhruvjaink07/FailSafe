@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/dhruvjaink07/failsafe/internal/models"
+	"github.com/dhruvjaink07/failsafe/internal/monitoring"
 )
 
 func (o *Orchestrator) createExperiment(
@@ -286,12 +287,21 @@ func (o *Orchestrator) GetExperimentTargetType(id string) (string, error) {
 }
 
 func (o *Orchestrator) AddFrontendMetrics(data []models.FrontendMetrics) {
+	monitorByExperiment := make(map[string]*monitoring.WebMonitor)
 
 	o.mu.Lock()
-	defer o.mu.Unlock()
-
 	for _, metric := range data {
 		o.frontendMetrics[metric.ExperimentID] = append(o.frontendMetrics[metric.ExperimentID], metric)
+		if mon, ok := o.monitors[metric.ExperimentID].(*monitoring.WebMonitor); ok {
+			monitorByExperiment[metric.ExperimentID] = mon
+		}
+	}
+	o.mu.Unlock()
+
+	for _, metric := range data {
+		if mon, ok := monitorByExperiment[metric.ExperimentID]; ok {
+			mon.RecordIngest(metric)
+		}
 	}
 }
 

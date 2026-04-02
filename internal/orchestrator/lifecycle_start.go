@@ -112,8 +112,8 @@ func (o *Orchestrator) StartExperiment(
 		injector = fault.NewAndroidInjector(adbClient, resolvedAndroidApp.Package)
 		monitor = monitoring.NewAndroidMonitorWithCallback(callback, adbClient, resolvedAndroidApp.Package)
 	} else if isFrontendOnly {
-		injector = fault.NewNoopInjector()
-		monitor = monitoring.NewNoopMonitor()
+		injector = fault.NewWebInjector()
+		monitor = monitoring.NewWebMonitor(callback)
 	} else {
 		injector = fault.NewDockerInjector(o.docker)
 		monitor = monitoring.NewMonitor(callback, o.docker, targets)
