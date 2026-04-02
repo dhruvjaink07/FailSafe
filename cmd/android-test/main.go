@@ -54,6 +54,7 @@ func main() {
 		models.ExpectedState{Running: &expectedRunning, NotCrash: true, NotANR: true},
 		nil,
 		nil,
+		nil,
 	)
 
 	if err != nil {

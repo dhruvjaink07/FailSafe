@@ -11,6 +11,7 @@ This file is the entrypoint for API docs.
 
 ## Documentation Pages
 
+- Consolidated API reference: `API_DOCS.md`
 - API overview and endpoint map: `docs/api/README.md`
 - Backend API contract: `docs/api/backend-api.md`
 - Frontend integration and polling flow: `docs/api/frontend-testing.md`

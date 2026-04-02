@@ -160,6 +160,25 @@ func (o *Orchestrator) getAndroidMetrics(id string) map[string]interface{} {
 	o.mu.Unlock()
 
 	firstImpactAt, recoveryAt := findImpactAndRecoveryFromTransitions(transitions)
+	if firstImpactAt.IsZero() && len(flat) > 0 {
+		firstImpactAt, recoveryAt = inferAndroidImpactAndRecovery(flat, exp.FaultStartedAt)
+	}
+	if !firstImpactAt.IsZero() || !recoveryAt.IsZero() {
+		o.mu.Lock()
+		if _, ok := o.firstImpact[id]; !ok {
+			o.firstImpact[id] = make(map[string]time.Time)
+		}
+		if _, ok := o.recoveryAt[id]; !ok {
+			o.recoveryAt[id] = make(map[string]time.Time)
+		}
+		if !firstImpactAt.IsZero() {
+			o.firstImpact[id][primaryEndpoint] = firstImpactAt
+		}
+		if !recoveryAt.IsZero() {
+			o.recoveryAt[id][primaryEndpoint] = recoveryAt
+		}
+		o.mu.Unlock()
+	}
 
 	if len(firstImpactCopy) == 0 {
 		if !firstImpactAt.IsZero() {

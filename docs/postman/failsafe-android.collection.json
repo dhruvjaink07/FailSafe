@@ -59,7 +59,7 @@
           "mode": "raw",
           "raw": "{\n  \"fault_type\": \"kill_app\",\n  \"targets\": [\"com.example.code\"],\n  \"target_type\": \"android\",\n  \"observation_type\": \"android\",\n  \"duration_seconds\": 70,\n  \"apk\": \"{{apkId}}\",\n  \"android_run\": {\n    \"avd_name\": \"Pixel_8a\",\n    \"headless\": true,\n    \"reset_app_state\": true\n  },\n  \"scenarios\": [\n    { \"type\": \"kill_app\", \"at\": 20, \"duration_seconds\": 1 },\n    { \"type\": \"foreground_app\", \"at\": 30, \"duration_seconds\": 2 }\n  ],\n  \"expected\": {\n    \"running\": true,\n    \"not_crash\": true,\n    \"not_anr\": true,\n    \"should_recover\": true\n  }\n}"
         },
-        "url": "{{baseUrl}}/experiment/start"
+        "url": "{{baseUrl}}/experiments/android/start"
       },
       "event": [
         {
@@ -88,7 +88,7 @@
           "mode": "raw",
           "raw": "{\n  \"fault_type\": \"network_disable\",\n  \"targets\": [\"com.example.code\"],\n  \"target_type\": \"android\",\n  \"observation_type\": \"android\",\n  \"duration_seconds\": 85,\n  \"apk\": \"{{apkId}}\",\n  \"android_run\": {\n    \"avd_name\": \"Pixel_8a\",\n    \"headless\": true\n  },\n  \"scenarios\": [\n    { \"type\": \"network_disable\", \"at\": 8, \"duration_seconds\": 7 },\n    { \"type\": \"network_enable\", \"at\": 18, \"duration_seconds\": 1 },\n    { \"type\": \"network_flaky\", \"at\": 28, \"duration_seconds\": 10 },\n    { \"type\": \"network_latency\", \"at\": 44, \"duration_seconds\": 8 }\n  ],\n  \"expected\": {\n    \"running\": true,\n    \"not_crash\": true,\n    \"not_anr\": true,\n    \"should_recover\": true\n  }\n}"
         },
-        "url": "{{baseUrl}}/experiment/start"
+        "url": "{{baseUrl}}/experiments/android/start"
       },
       "event": [
         {
@@ -108,7 +108,7 @@
       "request": {
         "method": "GET",
         "header": [],
-        "url": "{{baseUrl}}/experiment/android/status?id={{experimentId}}"
+        "url": "{{baseUrl}}/experiments/android/status?id={{experimentId}}"
       }
     },
     {
@@ -116,7 +116,7 @@
       "request": {
         "method": "GET",
         "header": [],
-        "url": "{{baseUrl}}/experiment/get?id={{experimentId}}"
+        "url": "{{baseUrl}}/experiments/android/status?id={{experimentId}}"
       }
     },
     {
@@ -124,7 +124,7 @@
       "request": {
         "method": "GET",
         "header": [],
-        "url": "{{baseUrl}}/experiment/metrics/android?id={{experimentId}}"
+        "url": "{{baseUrl}}/experiments/android/metrics?id={{experimentId}}"
       }
     },
     {
@@ -132,7 +132,7 @@
       "request": {
         "method": "POST",
         "header": [],
-        "url": "{{baseUrl}}/experiment/stop?id={{experimentId}}"
+        "url": "{{baseUrl}}/experiments/android/stop?id={{experimentId}}"
       }
     }
   ],

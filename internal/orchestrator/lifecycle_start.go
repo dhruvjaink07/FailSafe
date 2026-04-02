@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/dhruvjaink07/failsafe/internal/android/adb"
 	"github.com/dhruvjaink07/failsafe/internal/fault"
@@ -40,6 +41,7 @@ func (o *Orchestrator) StartExperiment(
 	expected models.ExpectedState,
 	androidOptions *AndroidRunOptions,
 	androidApp *AndroidAppConfig,
+	frontendRun *models.FrontendRunConfig,
 ) (*models.Experiment, error) {
 	if duration <= 0 {
 		return nil, errors.New("invalid duration")
@@ -64,8 +66,10 @@ func (o *Orchestrator) StartExperiment(
 	}
 
 	var adbClient *adb.Client
+	isAndroid := strings.EqualFold(targetType, string(models.TargetAndroid))
+	isFrontendOnly := strings.EqualFold(targetType, string(models.TargetFrontend)) || strings.EqualFold(targetType, "web")
 	var useDeps models.DependencyGraph = deps
-	if targetType == "android" {
+	if isAndroid {
 		if resolvedAndroidApp.APKPath == "" || resolvedAndroidApp.Package == "" || resolvedAndroidApp.Activity == "" {
 			return nil, errors.New("android app config missing apk path/package/activity")
 		}
@@ -84,14 +88,15 @@ func (o *Orchestrator) StartExperiment(
 			return nil, err
 		}
 		adbClient = client
-	} else {
+	} else if !isFrontendOnly {
 		o.setupDocker(targets)
 	}
 
 	exp := o.createExperiment(id, targets, targetType, observationType, faultType, duration, adaptive, stepIntensity, maxIntensity, useDeps, targetMap)
 	exp.Scenario = scheduledFaults
 	exp.Expected = expected
-	if targetType == "android" {
+	exp.FrontendRun = frontendRun
+	if isAndroid {
 		exp.APKPath = resolvedAndroidApp.APKPath
 		exp.Package = resolvedAndroidApp.Package
 		exp.Activity = resolvedAndroidApp.Activity
@@ -103,9 +108,12 @@ func (o *Orchestrator) StartExperiment(
 	var injector fault.Injector
 	var monitor monitoring.MonitorInterface
 
-	if targetType == "android" {
+	if isAndroid {
 		injector = fault.NewAndroidInjector(adbClient, resolvedAndroidApp.Package)
 		monitor = monitoring.NewAndroidMonitorWithCallback(callback, adbClient, resolvedAndroidApp.Package)
+	} else if isFrontendOnly {
+		injector = fault.NewNoopInjector()
+		monitor = monitoring.NewNoopMonitor()
 	} else {
 		injector = fault.NewDockerInjector(o.docker)
 		monitor = monitoring.NewMonitor(callback, o.docker, targets)

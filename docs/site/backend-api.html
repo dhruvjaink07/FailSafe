@@ -60,14 +60,15 @@ Content-Type: multipart/form-data
   &quot;activity&quot;: &quot;com.example.code.MainActivity&quot;
 }
 </code></pre>
-<h2 id="3-start-experiment-shared-endpoint">3) Start Experiment (Shared Endpoint)</h2>
+<h2 id="3-start-experiment-platform-endpoints">3) Start Experiment (Platform Endpoints)</h2>
 <h3 id="request-2">Request</h3>
-<pre><code class="language-http">POST /experiment/start
+<pre><code class="language-http">POST /experiments/backend/start
 </code></pre>
-<p>This is one endpoint with two request modes:</p>
+<p>Use dedicated start endpoints by platform:</p>
 <ul>
-<li>Docker mode: backend service/container resilience tests.</li>
-<li>Android mode: APK/app resilience tests.</li>
+<li>Docker mode: <code>POST /experiments/backend/start</code></li>
+<li>Android mode: <code>POST /experiments/android/start</code></li>
+<li>Frontend mode: <code>POST /experiments/frontend/start</code></li>
 </ul>
 <h3 id="payload">Payload</h3>
 <p>Top-level request accepts both snake_case and camelCase aliases for most fields.
@@ -78,10 +79,11 @@ The <code>expected</code> and <code>scenario</code> object fields are strict and
   &quot;target_type&quot;: &quot;android&quot;,
   &quot;observation_type&quot;: &quot;android&quot;,
   &quot;duration_seconds&quot;: 70,
-  &quot;apk&quot;: &quot;3f99e4f9-1e61-442e-a587-257ed0549261&quot;,
+  &quot;apk&quot;: &quot;384f624c-c218-43de-b013-65331eb6edaf&quot;,
   &quot;android_run&quot;: {
     &quot;avd_name&quot;: &quot;Pixel_8a&quot;,
-    &quot;headless&quot;: true
+    &quot;headless&quot;: true,
+    &quot;reset_app_state&quot;: true
   },
   &quot;scenarios&quot;: [
     { &quot;type&quot;: &quot;network_disable&quot;, &quot;at&quot;: 10, &quot;duration_seconds&quot;: 6 },
@@ -184,7 +186,71 @@ The <code>expected</code> and <code>scenario</code> object fields are strict and
 <h3 id="response-2">Response</h3>
 <p>Returns experiment object with id, state, phase, and metadata.</p>
 <h3 id="backend-testing-request-bodies">Backend Testing Request Bodies</h3>
-<p>Use these payloads directly for integration tests against <code>POST /experiment/start</code>.</p>
+<p>Use these payloads directly for integration tests against <code>POST /experiments/backend/start</code>.</p>
+<h4 id="example-backend-docker-experiment-request">Example: Backend (Docker) Experiment Request</h4>
+<pre><code class="language-json">{
+  &quot;faultType&quot;: &quot;kill&quot;,
+  &quot;targets&quot;: [&quot;user-service&quot;],
+  &quot;targetType&quot;: &quot;docker&quot;,
+  &quot;observationType&quot;: &quot;http&quot;,
+  &quot;observedEndpoints&quot;: [
+    &quot;http://api-gateway:8080/api/users/1&quot;,
+    &quot;http://api-gateway:8080/api/orders/10&quot;,
+    &quot;http://user-service:8081/users/1&quot;,
+    &quot;http://order-service:8082/orders/10&quot;,
+    &quot;http://payment-service:8083/payments/10&quot;,
+    &quot;http://inventory-service:8084/inventory/A1&quot;,
+    &quot;http://shipping-service:8085/shipping/10&quot;,
+    &quot;http://notification-service:8086/notifications/10&quot;,
+    &quot;http://recommendation-service:8087/recommendations/1&quot;
+  ],
+  &quot;duration&quot;: 60,
+  &quot;adaptive&quot;: true,
+  &quot;stepIntensity&quot;: 20,
+  &quot;maxIntensity&quot;: 100,
+  &quot;dependencyGraph&quot;: {
+    &quot;http://api-gateway:8080/api/users/1&quot;: [&quot;http://user-service:8081/users/1&quot;],
+    &quot;http://api-gateway:8080/api/orders/10&quot;: [&quot;http://order-service:8082/orders/10&quot;],
+    &quot;http://user-service:8081/users/1&quot;: [&quot;http://recommendation-service:8087/recommendations/1&quot;],
+    &quot;http://order-service:8082/orders/10&quot;: [
+      &quot;http://payment-service:8083/payments/10&quot;,
+      &quot;http://inventory-service:8084/inventory/A1&quot;,
+      &quot;http://shipping-service:8085/shipping/10&quot;
+    ],
+    &quot;http://payment-service:8083/payments/10&quot;: [],
+    &quot;http://inventory-service:8084/inventory/A1&quot;: [],
+    &quot;http://shipping-service:8085/shipping/10&quot;: [&quot;http://notification-service:8086/notifications/10&quot;],
+    &quot;http://notification-service:8086/notifications/10&quot;: [],
+    &quot;http://recommendation-service:8087/recommendations/1&quot;: [&quot;http://inventory-service:8084/inventory/A1&quot;]
+  },
+  &quot;targetEndpointMap&quot;: {
+    &quot;api-gateway&quot;: [
+      &quot;http://api-gateway:8080/api/users/1&quot;,
+      &quot;http://api-gateway:8080/api/orders/10&quot;
+    ],
+    &quot;user-service&quot;: [&quot;http://user-service:8081/users/1&quot;],
+    &quot;order-service&quot;: [&quot;http://order-service:8082/orders/10&quot;],
+    &quot;payment-service&quot;: [&quot;http://payment-service:8083/payments/10&quot;],
+    &quot;inventory-service&quot;: [&quot;http://inventory-service:8084/inventory/A1&quot;],
+    &quot;shipping-service&quot;: [&quot;http://shipping-service:8085/shipping/10&quot;],
+    &quot;notification-service&quot;: [&quot;http://notification-service:8086/notifications/10&quot;],
+    &quot;recommendation-service&quot;: [&quot;http://recommendation-service:8087/recommendations/1&quot;]
+  }
+}
+</code></pre>
+<blockquote>
+<p><strong>Note:</strong></p>
+<ul>
+<li>Use this shape for backend (docker) experiments. For Android, see the Android example below.</li>
+<li>The available fault types depend on the experiment mode:
+<ul>
+<li><strong>Backend (Docker):</strong> kill, network_delay, packet_loss, cpu_stress, memory_stress, etc.</li>
+<li><strong>Android:</strong> kill_app, network_disable, network_latency, revoke_camera, etc.</li>
+</ul>
+</li>
+<li>The UI and API will only show valid fault types for the selected mode. Toggle the experiment type to see the relevant fault options.</li>
+</ul>
+</blockquote>
 <h3 id="embedded-from-existing-collection-docker">Embedded From Existing Collection (Docker)</h3>
 <p>The body below is the legacy payload format you shared:</p>
 <pre><code class="language-json">{
@@ -410,29 +476,16 @@ The <code>expected</code> and <code>scenario</code> object fields are strict and
 </code></pre>
 <h2 id="4-get-experiment">4) Get Experiment</h2>
 <h3 id="request-3">Request</h3>
-<pre><code class="language-http">GET /experiment/get?id={experiment_id}
+<pre><code class="language-http">GET /experiments/backend/status?id={experiment_id}
 </code></pre>
 <h3 id="response-3">Response</h3>
 <p>Experiment metadata object (<code>state</code>, <code>phase</code>, timestamps, baseline fields, etc.).</p>
-<h2 id="5-get-metrics-compatibility">5) Get Metrics (Compatibility)</h2>
+<h2 id="5-get-backend-metrics">5) Get Backend Metrics</h2>
 <h3 id="request-4">Request</h3>
-<pre><code class="language-http">GET /experiment/metrics?id={experiment_id}
+<pre><code class="language-http">GET /experiments/backend/metrics?id={experiment_id}
 </code></pre>
 <h3 id="response-4">Response</h3>
-<p>Compatibility endpoint. It routes by experiment type internally.</p>
-<p>For Android experiments, response includes:</p>
-<ul>
-<li><code>health</code></li>
-<li><code>recovery</code></li>
-<li><code>stability</code></li>
-<li><code>state_transitions</code></li>
-<li><code>timeline</code></li>
-<li><code>replay_hints</code></li>
-<li><code>validation</code></li>
-<li><code>summary</code></li>
-<li><code>scenario</code></li>
-</ul>
-<p>For backend/docker experiments, response includes:</p>
+<p>Backend/docker response includes:</p>
 <ul>
 <li><code>endpoints</code></li>
 <li><code>blast_radius_percent</code></li>
@@ -441,27 +494,18 @@ The <code>expected</code> and <code>scenario</code> object fields are strict and
 <li><code>resilience_threshold</code></li>
 <li><code>timeline</code></li>
 </ul>
-<h2 id="6-get-backend-metrics-segregated">6) Get Backend Metrics (Segregated)</h2>
+<h2 id="6-get-android-metrics">6) Get Android Metrics</h2>
 <h3 id="request-5">Request</h3>
-<pre><code class="language-http">GET /experiment/metrics/backend?id={experiment_id}
+<pre><code class="language-http">GET /experiments/android/metrics?id={experiment_id}
 </code></pre>
 <h3 id="behavior">Behavior</h3>
 <ul>
-<li>Returns only backend/docker metrics shape.</li>
-<li>Returns <code>400</code> if experiment id belongs to Android run.</li>
-</ul>
-<h2 id="7-get-android-metrics-segregated">7) Get Android Metrics (Segregated)</h2>
-<h3 id="request-6">Request</h3>
-<pre><code class="language-http">GET /experiment/metrics/android?id={experiment_id}
-</code></pre>
-<h3 id="behavior-1">Behavior</h3>
-<ul>
 <li>Returns only Android metrics shape.</li>
-<li>Returns <code>400</code> if experiment id belongs to backend/docker run.</li>
+<li>Returns <code>400</code> if experiment id belongs to non-Android run.</li>
 </ul>
-<h2 id="8-android-live-status">8) Android Live Status</h2>
-<h3 id="request-7">Request</h3>
-<pre><code class="language-http">GET /experiment/android/status?id={experiment_id}
+<h2 id="7-android-live-status">7) Android Live Status</h2>
+<h3 id="request-6">Request</h3>
+<pre><code class="language-http">GET /experiments/android/status?id={experiment_id}
 </code></pre>
 <h3 id="response-5">Response</h3>
 <p>Lightweight polling payload containing:</p>
@@ -473,15 +517,15 @@ The <code>expected</code> and <code>scenario</code> object fields are strict and
 <li><code>timeline</code></li>
 <li>recent transitions and fault events</li>
 </ul>
-<h2 id="9-stop-experiment">9) Stop Experiment</h2>
-<h3 id="request-8">Request</h3>
-<pre><code class="language-http">POST /experiment/stop?id={experiment_id}
+<h2 id="8-stop-backend-experiment">8) Stop Backend Experiment</h2>
+<h3 id="request-7">Request</h3>
+<pre><code class="language-http">POST /experiments/backend/stop?id={experiment_id}
 </code></pre>
 <h3 id="response-6">Response</h3>
 <pre><code class="language-text">experiment stopped
 </code></pre>
-<h2 id="10-scenario-presets">10) Scenario Presets</h2>
-<h3 id="request-9">Request</h3>
+<h2 id="9-scenario-presets">9) Scenario Presets</h2>
+<h3 id="request-8">Request</h3>
 <pre><code class="language-http">GET /scenarios/presets
 </code></pre>
 <h3 id="response-7">Response</h3>

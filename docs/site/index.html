@@ -61,46 +61,82 @@
 <td>Upload APK and extract package/activity</td>
 </tr>
 <tr>
-<td>Experiment</td>
+<td>Backend</td>
 <td>POST</td>
-<td>/experiment/start</td>
-<td>Start Docker or Android resilience run</td>
+<td>/experiments/backend/start</td>
+<td>Start backend resilience run</td>
 </tr>
 <tr>
-<td>Experiment</td>
+<td>Backend</td>
 <td>GET</td>
-<td>/experiment/get?id=...</td>
-<td>Fetch experiment object and lifecycle state</td>
+<td>/experiments/backend/status?id=...</td>
+<td>Backend lifecycle status payload</td>
 </tr>
 <tr>
-<td>Metrics (compat)</td>
-<td>GET</td>
-<td>/experiment/metrics?id=...</td>
-<td>Compatibility endpoint, auto-routes by experiment type</td>
-</tr>
-<tr>
-<td>Metrics (backend)</td>
-<td>GET</td>
-<td>/experiment/metrics/backend?id=...</td>
-<td>Docker/backend-only metrics payload</td>
-</tr>
-<tr>
-<td>Metrics (android)</td>
-<td>GET</td>
-<td>/experiment/metrics/android?id=...</td>
-<td>Android-only metrics payload</td>
-</tr>
-<tr>
-<td>Android runtime</td>
-<td>GET</td>
-<td>/experiment/android/status?id=...</td>
-<td>Lightweight polling payload during active run</td>
-</tr>
-<tr>
-<td>Experiment</td>
+<td>Backend</td>
 <td>POST</td>
-<td>/experiment/stop?id=...</td>
-<td>Stop an active run</td>
+<td>/experiments/backend/stop?id=...</td>
+<td>Stop backend run</td>
+</tr>
+<tr>
+<td>Backend</td>
+<td>GET</td>
+<td>/experiments/backend/metrics?id=...</td>
+<td>Backend metrics payload</td>
+</tr>
+<tr>
+<td>Android</td>
+<td>POST</td>
+<td>/experiments/android/start</td>
+<td>Start Android resilience run</td>
+</tr>
+<tr>
+<td>Android</td>
+<td>GET</td>
+<td>/experiments/android/status?id=...</td>
+<td>Android runtime status payload</td>
+</tr>
+<tr>
+<td>Android</td>
+<td>POST</td>
+<td>/experiments/android/stop?id=...</td>
+<td>Stop Android run</td>
+</tr>
+<tr>
+<td>Android</td>
+<td>GET</td>
+<td>/experiments/android/metrics?id=...</td>
+<td>Android metrics payload</td>
+</tr>
+<tr>
+<td>Frontend</td>
+<td>POST</td>
+<td>/experiments/frontend/start</td>
+<td>Start frontend resilience run</td>
+</tr>
+<tr>
+<td>Frontend</td>
+<td>GET</td>
+<td>/experiments/frontend/status?id=...</td>
+<td>Frontend lifecycle status payload</td>
+</tr>
+<tr>
+<td>Frontend</td>
+<td>POST</td>
+<td>/experiments/frontend/stop?id=...</td>
+<td>Stop frontend run</td>
+</tr>
+<tr>
+<td>Frontend</td>
+<td>GET</td>
+<td>/experiments/frontend/metrics?id=...</td>
+<td>Frontend metrics payload</td>
+</tr>
+<tr>
+<td>Frontend collector</td>
+<td>POST</td>
+<td>/frontend/metrics</td>
+<td>Ingest browser-collected frontend metrics batches</td>
 </tr>
 <tr>
 <td>Presets</td>
@@ -128,6 +164,7 @@
 </ul>
 <h2 id="see-also">See Also</h2>
 <ul>
+<li>Platform validation workflow: <code>docs/testing/README.md</code></li>
 <li>Backend contract details: <code>docs/api/backend-api.md</code></li>
 <li>Frontend workflow details: <code>docs/api/frontend-testing.md</code></li>
 <li>Postman examples: <code>docs/api/postman-testing.md</code></li>

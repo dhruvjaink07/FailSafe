@@ -32,7 +32,7 @@ Store returned fields for run:
 Endpoint:
 
 ```http
-POST /experiment/start
+POST /experiments/frontend/start
 ```
 
 Frontend payload should include:
@@ -47,7 +47,7 @@ Frontend payload should include:
 Endpoint:
 
 ```http
-GET /experiment/android/status?id={experiment_id}
+GET /experiments/frontend/status?id={experiment_id}
 ```
 
 Poll interval:
@@ -63,7 +63,7 @@ Stop polling when:
 Endpoint:
 
 ```http
-GET /experiment/metrics?id={experiment_id}
+GET /experiments/frontend/metrics?id={experiment_id}
 ```
 
 Use this for full charts and post-run report pages.

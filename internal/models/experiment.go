@@ -5,8 +5,9 @@ import "time"
 type TargetType string
 
 const (
-	TargetDocker  TargetType = "docker"
-	TargetAndroid TargetType = "android"
+	TargetDocker   TargetType = "docker"
+	TargetAndroid  TargetType = "android"
+	TargetFrontend TargetType = "frontend"
 )
 
 type DependencyGraph map[string][]string
@@ -40,18 +41,19 @@ type Experiment struct {
 	ObservedEndpoints []string `json:"observed_endpoints"`
 	// Injection targets (services, containers, devices)
 	Targets []string `json:"targets"`
-	// Target platform (docker | android)
+	// Target platform (docker | android | frontend)
 	TargetType string `json:"target_type"`
 	// Observation strategy (http | android)
 	ObservationType string `json:"observation_type"`
 
-	FaultType string           `json:"fault_type"`
-	Duration  int              `json:"duration_seconds"`
-	Scenario  []ScheduledFault `json:"scenario,omitempty"`
-	Expected  ExpectedState    `json:"expected,omitempty"`
-	APKPath   string           `json:"apk_path,omitempty"`
-	Package   string           `json:"package,omitempty"`
-	Activity  string           `json:"activity,omitempty"`
+	FaultType   string             `json:"fault_type"`
+	Duration    int                `json:"duration_seconds"`
+	Scenario    []ScheduledFault   `json:"scenario,omitempty"`
+	Expected    ExpectedState      `json:"expected,omitempty"`
+	APKPath     string             `json:"apk_path,omitempty"`
+	Package     string             `json:"package,omitempty"`
+	Activity    string             `json:"activity,omitempty"`
+	FrontendRun *FrontendRunConfig `json:"frontend_run,omitempty"`
 
 	State ExperimentState `json:"state"`
 	Phase ExperimentPhase `json:"phase"`
@@ -77,6 +79,12 @@ type Experiment struct {
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type FrontendRunConfig struct {
+	BaseURL         string   `json:"base_url,omitempty"`
+	MetricsEndpoint string   `json:"metrics_endpoint,omitempty"`
+	TargetURLs      []string `json:"target_urls,omitempty"`
 }
 
 type FaultTrigger struct {

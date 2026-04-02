@@ -29,8 +29,10 @@ func (o *Orchestrator) createCallback(id string) monitoring.EventCallback {
 			now = time.Now()
 		}
 
+		canTrackFaultImpact := !o.experiments[id].FaultStartedAt.IsZero() && !now.Before(o.experiments[id].FaultStartedAt)
+
 		// Always record firstImpact for first error, degraded, or down event
-		if sample.AppState == "not_running" || sample.Crash || sample.ANR {
+		if canTrackFaultImpact && (sample.AppState == "not_running" || sample.Crash || sample.ANR) {
 			if _, exists := o.firstImpact[id][sample.Endpoint]; !exists {
 				o.firstImpact[id][sample.Endpoint] = now
 			}
@@ -41,16 +43,22 @@ func (o *Orchestrator) createCallback(id string) monitoring.EventCallback {
 			if _, exists := o.downtime[id]; !exists {
 				o.downtime[id] = now
 			}
-			if _, exists := o.firstImpact[id][sample.Endpoint]; !exists {
-				o.firstImpact[id][sample.Endpoint] = now
+			if canTrackFaultImpact {
+				if _, exists := o.firstImpact[id][sample.Endpoint]; !exists {
+					o.firstImpact[id][sample.Endpoint] = now
+				}
 			}
 		case monitoring.EventDegraded:
-			if _, exists := o.firstImpact[id][sample.Endpoint]; !exists {
-				o.firstImpact[id][sample.Endpoint] = now
+			if canTrackFaultImpact {
+				if _, exists := o.firstImpact[id][sample.Endpoint]; !exists {
+					o.firstImpact[id][sample.Endpoint] = now
+				}
 			}
 		case monitoring.EventRecovered:
-			if _, exists := o.recoveryAt[id][sample.Endpoint]; !exists {
-				o.recoveryAt[id][sample.Endpoint] = now
+			if canTrackFaultImpact {
+				if _, exists := o.recoveryAt[id][sample.Endpoint]; !exists {
+					o.recoveryAt[id][sample.Endpoint] = now
+				}
 			}
 			if downAt, exists := o.downtime[id]; exists {
 				dur := now.Sub(downAt)

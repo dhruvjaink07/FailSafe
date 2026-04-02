@@ -1,0 +1,28 @@
+{
+  "name": "failsafe",
+  "version": "1.0.0",
+  "description": "> cmd/ → entry point binaries",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dhruvjaink07/FailSafe.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/dhruvjaink07/FailSafe/issues"
+  },
+  "homepage": "https://github.com/dhruvjaink07/FailSafe#readme",
+  "dependencies": {
+    "playwright": "^1.59.0"
+  }
+}

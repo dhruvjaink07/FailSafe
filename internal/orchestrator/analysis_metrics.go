@@ -120,11 +120,18 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 
 	// ===== EXISTING BACKEND / ANDROID =====
 	var result interface{}
+	var err error
 
 	if exp.TargetType == "android" || exp.ObservationType == "android" {
-		result, _ = o.GetAndroidMetrics(id)
+		result, err = o.GetAndroidMetrics(id)
+	} else if exp.TargetType == "frontend" || exp.TargetType == "web" {
+		result, err = o.GetFrontendMetrics(id)
 	} else {
-		result, _ = o.GetBackendMetrics(id)
+		result, err = o.GetBackendMetrics(id)
+	}
+
+	if err != nil {
+		return nil, err
 	}
 
 	// ===== FINAL INTEGRATION =====

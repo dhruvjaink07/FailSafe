@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"errors"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/dhruvjaink07/failsafe/internal/models"
@@ -267,6 +268,23 @@ func (o *Orchestrator) StopExperiment(id string) error {
 	return nil
 }
 
+func (o *Orchestrator) GetExperimentTargetType(id string) (string, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	exp, ok := o.experiments[id]
+	if !ok {
+		return "", errors.New("experiment not found")
+	}
+
+	targetType := strings.ToLower(strings.TrimSpace(exp.TargetType))
+	if targetType == "web" {
+		targetType = string(models.TargetFrontend)
+	}
+
+	return targetType, nil
+}
+
 func (o *Orchestrator) AddFrontendMetrics(data []models.FrontendMetrics) {
 
 	o.mu.Lock()
@@ -275,6 +293,35 @@ func (o *Orchestrator) AddFrontendMetrics(data []models.FrontendMetrics) {
 	for _, metric := range data {
 		o.frontendMetrics[metric.ExperimentID] = append(o.frontendMetrics[metric.ExperimentID], metric)
 	}
+}
+
+func (o *Orchestrator) GetFrontendMetrics(id string) (interface{}, error) {
+	targetType, err := o.GetExperimentTargetType(id)
+	if err != nil {
+		return nil, err
+	}
+	if targetType != string(models.TargetFrontend) {
+		return nil, errors.New("experiment is not frontend; use backend/android metrics endpoint")
+	}
+
+	o.mu.Lock()
+	frontend := append([]models.FrontendMetrics(nil), o.frontendMetrics[id]...)
+	o.mu.Unlock()
+
+	frontendScoreMap := computeFrontendScore(frontend)
+
+	var frontendScorePtr *float64
+	if len(frontend) > 0 {
+		if s, ok := frontendScoreMap["score"].(float64); ok {
+			frontendScorePtr = &s
+		}
+	}
+
+	return map[string]interface{}{
+		"frontend":       frontend,
+		"frontend_score": frontendScoreMap,
+		"failsafe_index": computeFailSafeIndex(nil, frontendScorePtr),
+	}, nil
 }
 
 func computeFrontendScore(metrics []models.FrontendMetrics) map[string]interface{} {

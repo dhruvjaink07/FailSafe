@@ -51,7 +51,7 @@
 </ul>
 <h2 id="step-2-start-experiment">Step 2: Start Experiment</h2>
 <p>Endpoint:</p>
-<pre><code class="language-http">POST /experiment/start
+<pre><code class="language-http">POST /experiments/frontend/start
 </code></pre>
 <p>Frontend payload should include:</p>
 <ul>
@@ -62,7 +62,7 @@
 </ul>
 <h2 id="step-3-poll-live-status">Step 3: Poll Live Status</h2>
 <p>Endpoint:</p>
-<pre><code class="language-http">GET /experiment/android/status?id={experiment_id}
+<pre><code class="language-http">GET /experiments/frontend/status?id={experiment_id}
 </code></pre>
 <p>Poll interval:</p>
 <ul>
@@ -74,7 +74,7 @@
 </ul>
 <h2 id="step-4-fetch-final-report">Step 4: Fetch Final Report</h2>
 <p>Endpoint:</p>
-<pre><code class="language-http">GET /experiment/metrics?id={experiment_id}
+<pre><code class="language-http">GET /experiments/frontend/metrics?id={experiment_id}
 </code></pre>
 <p>Use this for full charts and post-run report pages.</p>
 <h2 id="suggested-ui-sections">Suggested UI Sections</h2>

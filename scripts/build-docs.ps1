@@ -22,8 +22,9 @@ foreach ($file in $required) {
 }
 
 $apiSignals = @(
-  "/experiment/start",
-  "/experiment/metrics",
+  "/experiments/backend/start",
+  "/experiments/android/status",
+  "/experiments/frontend/metrics",
   "/upload/apk"
 )
 

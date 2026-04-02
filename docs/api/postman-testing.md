@@ -29,15 +29,15 @@ Import these collection files for strict separation:
 - Docker/backend collection: `docs/postman/failsafe-docker.collection.json`
 - Android collection: `docs/postman/failsafe-android.collection.json`
 
-## Shared Endpoints
+## Platform Endpoints
 
 1. Health: `GET {{baseUrl}}/health`
-2. Start: `POST {{baseUrl}}/experiment/start`
-3. Get experiment: `GET {{baseUrl}}/experiment/get?id={{experimentId}}`
-4. Get metrics (compat): `GET {{baseUrl}}/experiment/metrics?id={{experimentId}}`
-5. Stop (optional): `POST {{baseUrl}}/experiment/stop?id={{experimentId}}`
+2. Backend start: `POST {{baseUrl}}/experiments/backend/start`
+3. Backend status: `GET {{baseUrl}}/experiments/backend/status?id={{experimentId}}`
+4. Backend metrics: `GET {{baseUrl}}/experiments/backend/metrics?id={{experimentId}}`
+5. Backend stop (optional): `POST {{baseUrl}}/experiments/backend/stop?id={{experimentId}}`
 
-The start endpoint is shared, but there are two distinct request modes below.
+Each platform now has a dedicated route family, with no generic lifecycle endpoint.
 
 ## Section A: Backend (Docker) Collection
 
@@ -271,13 +271,13 @@ pm.environment.set("experimentId", data.id);
 Android live status (Android mode):
 
 ```http
-GET {{baseUrl}}/experiment/android/status?id={{experimentId}}
+GET {{baseUrl}}/experiments/android/status?id={{experimentId}}
 ```
 
 Final metrics (both modes):
 
 ```http
-GET {{baseUrl}}/experiment/metrics?id={{experimentId}}
+GET {{baseUrl}}/experiments/android/metrics?id={{experimentId}}
 ```
 
 Segregated metrics endpoints:
@@ -285,13 +285,13 @@ Segregated metrics endpoints:
 Backend/docker only:
 
 ```http
-GET {{baseUrl}}/experiment/metrics/backend?id={{experimentId}}
+GET {{baseUrl}}/experiments/backend/metrics?id={{experimentId}}
 ```
 
 Android only:
 
 ```http
-GET {{baseUrl}}/experiment/metrics/android?id={{experimentId}}
+GET {{baseUrl}}/experiments/android/metrics?id={{experimentId}}
 ```
 
 ## Fault Options Quick List

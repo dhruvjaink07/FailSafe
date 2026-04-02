@@ -18,13 +18,19 @@ http://localhost:8000
 | --- | --- | --- | --- |
 | Health | GET | /health | Liveness check |
 | APK upload | POST | /upload/apk | Upload APK and extract package/activity |
-| Experiment | POST | /experiment/start | Start Docker or Android resilience run |
-| Experiment | GET | /experiment/get?id=... | Fetch experiment object and lifecycle state |
-| Metrics (compat) | GET | /experiment/metrics?id=... | Compatibility endpoint, auto-routes by experiment type |
-| Metrics (backend) | GET | /experiment/metrics/backend?id=... | Docker/backend-only metrics payload |
-| Metrics (android) | GET | /experiment/metrics/android?id=... | Android-only metrics payload |
-| Android runtime | GET | /experiment/android/status?id=... | Lightweight polling payload during active run |
-| Experiment | POST | /experiment/stop?id=... | Stop an active run |
+| Backend | POST | /experiments/backend/start | Start backend resilience run |
+| Backend | GET | /experiments/backend/status?id=... | Backend lifecycle status payload |
+| Backend | POST | /experiments/backend/stop?id=... | Stop backend run |
+| Backend | GET | /experiments/backend/metrics?id=... | Backend metrics payload |
+| Android | POST | /experiments/android/start | Start Android resilience run |
+| Android | GET | /experiments/android/status?id=... | Android runtime status payload |
+| Android | POST | /experiments/android/stop?id=... | Stop Android run |
+| Android | GET | /experiments/android/metrics?id=... | Android metrics payload |
+| Frontend | POST | /experiments/frontend/start | Start frontend resilience run |
+| Frontend | GET | /experiments/frontend/status?id=... | Frontend lifecycle status payload |
+| Frontend | POST | /experiments/frontend/stop?id=... | Stop frontend run |
+| Frontend | GET | /experiments/frontend/metrics?id=... | Frontend metrics payload |
+| Frontend collector | POST | /frontend/metrics | Ingest browser-collected frontend metrics batches |
 | Presets | GET | /scenarios/presets | List available Android scenario presets and fault types |
 
 ## Data Persistence
@@ -46,6 +52,7 @@ http://localhost:8000
 
 ## See Also
 
+- Platform validation workflow: `docs/testing/README.md`
 - Backend contract details: `docs/api/backend-api.md`
 - Frontend workflow details: `docs/api/frontend-testing.md`
 - Postman examples: `docs/api/postman-testing.md`

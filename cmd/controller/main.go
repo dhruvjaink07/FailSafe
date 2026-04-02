@@ -39,16 +39,25 @@ func main() {
 	)
 
 	http.HandleFunc("/health", handlers.HealthHandler())
-	http.HandleFunc("/experiment/start", handlers.ExperimentStartHandler(orch))
-	http.HandleFunc("/experiment/get", handlers.ExperimentGetHandler(orch))
-	http.HandleFunc("/experiment/stop", handlers.ExperimentStopHandler(orch))
-	http.HandleFunc("/experiment/metrics", handlers.ExperimentMetricsHandler(orch))
-	http.HandleFunc("/experiment/metrics/backend", handlers.ExperimentBackendMetricsHandler(orch))
-	http.HandleFunc("/experiment/metrics/android", handlers.ExperimentAndroidMetricsHandler(orch))
-	http.HandleFunc("/experiment/android/status", handlers.ExperimentAndroidStatusHandler(orch))
 	http.HandleFunc("/upload/apk", handlers.UploadAPKHandler())
 	http.HandleFunc("/scenarios/presets", handlers.ScenarioPresetsHandler())
 	http.HandleFunc("/frontend/metrics", handlers.FrontendMetricsHandler(orch))
+
+	// Platform-scoped routes for lifecycle/status/metrics.
+	http.HandleFunc("/experiments/backend/start", handlers.ExperimentBackendStartHandler(orch))
+	http.HandleFunc("/experiments/backend/status", handlers.ExperimentBackendStatusHandler(orch))
+	http.HandleFunc("/experiments/backend/stop", handlers.ExperimentBackendStopHandler(orch))
+	http.HandleFunc("/experiments/backend/metrics", handlers.ExperimentBackendMetricsHandler(orch))
+
+	http.HandleFunc("/experiments/android/start", handlers.ExperimentAndroidStartHandler(orch))
+	http.HandleFunc("/experiments/android/status", handlers.ExperimentAndroidStatusHandler(orch))
+	http.HandleFunc("/experiments/android/stop", handlers.ExperimentAndroidStopHandler(orch))
+	http.HandleFunc("/experiments/android/metrics", handlers.ExperimentAndroidMetricsHandler(orch))
+
+	http.HandleFunc("/experiments/frontend/start", handlers.ExperimentFrontendStartHandler(orch))
+	http.HandleFunc("/experiments/frontend/status", handlers.ExperimentFrontendStatusHandler(orch))
+	http.HandleFunc("/experiments/frontend/stop", handlers.ExperimentFrontendStopHandler(orch))
+	http.HandleFunc("/experiments/frontend/metrics", handlers.ExperimentFrontendMetricsHandler(orch))
 
 	log.Println("Server running on :8000")
 	log.Fatal(http.ListenAndServe(":8000", nil))

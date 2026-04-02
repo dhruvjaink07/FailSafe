@@ -1,6 +1,8 @@
 package orchestrator
 
 import (
+	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"time"
@@ -224,13 +226,38 @@ func (o *Orchestrator) runScenarioFaults(id string) {
 			Intensity:       intensity,
 		}
 
-		_ = injector.Inject(config)
+		// Guard each step so one blocked injector call cannot freeze the experiment in injecting.
+		stepTimeout := time.Duration(dur+8) * time.Second
+		if stepTimeout < 12*time.Second {
+			stepTimeout = 12 * time.Second
+		}
+
+		if err := o.injectWithTimeout(injector, config, stepTimeout); err != nil {
+			log.Printf("scenario step timeout/error id=%s type=%s at=%ds: %v", id, config.Type, scheduled.At, err)
+			continue
+		}
+
 		o.recordFaultEvent(id, config.Type)
 	}
 
 	o.setPhase(id, models.PhaseRecovering)
 	time.Sleep(5 * time.Second)
 	o.completeExperiment(id)
+}
+
+func (o *Orchestrator) injectWithTimeout(injector fault.Injector, config fault.FaultConfig, timeout time.Duration) error {
+	errCh := make(chan error, 1)
+
+	go func() {
+		errCh <- injector.Inject(config)
+	}()
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-time.After(timeout):
+		return fmt.Errorf("inject timed out after %s", timeout)
+	}
 }
 
 func (o *Orchestrator) waitForRequestTrigger(id string, trigger *models.FaultTrigger, since time.Time) bool {

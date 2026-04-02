@@ -1,0 +1,12 @@
+{
+  "fault_type": "latency",
+  "target_type": "frontend",
+  "duration": 120,
+  "frontendRun": {
+    "baseUrl": "https://jsonplaceholder.typicode.com",
+    "metricsEndpoint": "http://localhost:8000/frontend/metrics",
+    "targetUrls": [
+      ""
+    ]
+  }
+}

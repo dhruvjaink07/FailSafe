@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -151,17 +152,17 @@ func extractAPKMetadata(apkPath string) (string, string, error) {
 		return "", "", err
 	}
 
-	pkgRe := regexp.MustCompile(`package:\\s+name='([^']+)'`)
-	activityRe := regexp.MustCompile(`launchable-activity:\\s+name='([^']+)'`)
+	pkgRe := regexp.MustCompile(`(?m)^package:\s+name=['"]([^'"]+)['"]`)
+	activityRe := regexp.MustCompile(`(?m)^launchable-activity:\s+name=['"]([^'"]+)['"]`)
 
 	pkgMatch := pkgRe.FindStringSubmatch(out)
 	if len(pkgMatch) < 2 {
-		return "", "", fmt.Errorf("package name not found in aapt output")
+		return "", "", fmt.Errorf("package name not found in aapt output: %s", compactAAPTOutput(out))
 	}
 
 	activityMatch := activityRe.FindStringSubmatch(out)
 	if len(activityMatch) < 2 {
-		return "", "", fmt.Errorf("launchable activity not found in aapt output")
+		return "", "", fmt.Errorf("launchable activity not found in aapt output: %s", compactAAPTOutput(out))
 	}
 
 	return strings.TrimSpace(pkgMatch[1]), strings.TrimSpace(activityMatch[1]), nil
@@ -175,14 +176,22 @@ func runAAPT(apkPath string) (string, error) {
 	}
 
 	if sdk := firstNonEmpty(strings.TrimSpace(os.Getenv("ANDROID_SDK_ROOT")), strings.TrimSpace(os.Getenv("ANDROID_HOME"))); sdk != "" {
-		pattern := filepath.Join(sdk, "build-tools", "*", "aapt*")
-		matches, _ := filepath.Glob(pattern)
-		sort.Strings(matches)
-		for i := len(matches) - 1; i >= 0; i-- {
-			candidates = append(candidates, matches[i])
+		patterns := []string{
+			filepath.Join(sdk, "build-tools", "*", "aapt*.exe"),
+			filepath.Join(sdk, "build-tools", "*", "aapt*"),
+		}
+		for _, pattern := range patterns {
+			matches, _ := filepath.Glob(pattern)
+			sort.Strings(matches)
+			for i := len(matches) - 1; i >= 0; i-- {
+				candidates = append(candidates, matches[i])
+			}
 		}
 	}
 
+	if runtime.GOOS == "windows" {
+		candidates = append(candidates, "aapt.exe")
+	}
 	candidates = append(candidates, "aapt")
 
 	var lastErr error
@@ -199,4 +208,16 @@ func runAAPT(apkPath string) (string, error) {
 		lastErr = fmt.Errorf("aapt command unavailable")
 	}
 	return "", lastErr
+}
+
+func compactAAPTOutput(out string) string {
+	trimmed := strings.TrimSpace(out)
+	if trimmed == "" {
+		return "<empty output>"
+	}
+	const maxLen = 600
+	if len(trimmed) <= maxLen {
+		return trimmed
+	}
+	return trimmed[:maxLen] + "..."
 }

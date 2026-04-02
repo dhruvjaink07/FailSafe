@@ -28,7 +28,7 @@
           "mode": "raw",
           "raw": "{\n  \"faultType\": \"network_delay\",\n  \"targets\": [\"svc-c\"],\n  \"targetType\": \"docker\",\n  \"observationType\": \"http\",\n  \"observedEndpoints\": [\n    \"http://svc-a\",\n    \"http://svc-b\",\n    \"http://svc-c\"\n  ],\n  \"duration\": 60,\n  \"adaptive\": true,\n  \"stepIntensity\": 20,\n  \"maxIntensity\": 100,\n  \"dependencyGraph\": {\n    \"http://svc-a\": [\"http://svc-b\"],\n    \"http://svc-b\": [\"http://svc-c\"],\n    \"http://svc-c\": []\n  },\n  \"targetEndpointMap\": {\n    \"svc-a\": [\"http://svc-a\"],\n    \"svc-b\": [\"http://svc-b\"],\n    \"svc-c\": [\"http://svc-c\"]\n  }\n}"
         },
-        "url": "{{baseUrl}}/experiment/start"
+        "url": "{{baseUrl}}/experiments/backend/start"
       },
       "event": [
         {
@@ -57,7 +57,7 @@
           "mode": "raw",
           "raw": "{\n  \"fault_type\": \"kill\",\n  \"targets\": [\"svc-c\"],\n  \"target_type\": \"docker\",\n  \"observation_type\": \"http\",\n  \"observed_endpoints\": [\"http://svc-a\", \"http://svc-b\", \"http://svc-c\"],\n  \"duration_seconds\": 75,\n  \"scenarios\": [\n    { \"type\": \"kill\", \"at\": 8, \"duration_seconds\": 1 },\n    { \"type\": \"cpu_stress\", \"at\": 20, \"duration_seconds\": 25 },\n    { \"type\": \"memory_stress\", \"at\": 50, \"duration_seconds\": 15 }\n  ],\n  \"expected\": {\n    \"running\": true\n  }\n}"
         },
-        "url": "{{baseUrl}}/experiment/start"
+        "url": "{{baseUrl}}/experiments/backend/start"
       },
       "event": [
         {
@@ -77,7 +77,7 @@
       "request": {
         "method": "GET",
         "header": [],
-        "url": "{{baseUrl}}/experiment/get?id={{experimentId}}"
+        "url": "{{baseUrl}}/experiments/backend/status?id={{experimentId}}"
       }
     },
     {
@@ -85,7 +85,7 @@
       "request": {
         "method": "GET",
         "header": [],
-        "url": "{{baseUrl}}/experiment/metrics/backend?id={{experimentId}}"
+        "url": "{{baseUrl}}/experiments/backend/metrics?id={{experimentId}}"
       }
     },
     {
@@ -93,7 +93,7 @@
       "request": {
         "method": "POST",
         "header": [],
-        "url": "{{baseUrl}}/experiment/stop?id={{experimentId}}"
+        "url": "{{baseUrl}}/experiments/backend/stop?id={{experimentId}}"
       }
     }
   ],

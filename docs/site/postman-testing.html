@@ -48,15 +48,15 @@
 <li>Docker/backend collection: <code>docs/postman/failsafe-docker.collection.json</code></li>
 <li>Android collection: <code>docs/postman/failsafe-android.collection.json</code></li>
 </ul>
-<h2 id="shared-endpoints">Shared Endpoints</h2>
+<h2 id="platform-endpoints">Platform Endpoints</h2>
 <ol>
 <li>Health: <code>GET {{baseUrl}}/health</code></li>
-<li>Start: <code>POST {{baseUrl}}/experiment/start</code></li>
-<li>Get experiment: <code>GET {{baseUrl}}/experiment/get?id={{experimentId}}</code></li>
-<li>Get metrics (compat): <code>GET {{baseUrl}}/experiment/metrics?id={{experimentId}}</code></li>
-<li>Stop (optional): <code>POST {{baseUrl}}/experiment/stop?id={{experimentId}}</code></li>
+<li>Backend start: <code>POST {{baseUrl}}/experiments/backend/start</code></li>
+<li>Backend status: <code>GET {{baseUrl}}/experiments/backend/status?id={{experimentId}}</code></li>
+<li>Backend metrics: <code>GET {{baseUrl}}/experiments/backend/metrics?id={{experimentId}}</code></li>
+<li>Backend stop (optional): <code>POST {{baseUrl}}/experiments/backend/stop?id={{experimentId}}</code></li>
 </ol>
-<p>The start endpoint is shared, but there are two distinct request modes below.</p>
+<p>Each platform now has a dedicated route family, with no generic lifecycle endpoint.</p>
 <h2 id="section-a-backend-docker-collection">Section A: Backend (Docker) Collection</h2>
 <p>Use this mode for service/container fault testing.</p>
 <p>Required shape:</p>
@@ -249,17 +249,17 @@ pm.environment.set(&quot;experimentId&quot;, data.id);
 </code></pre>
 <h2 id="polling-and-results">Polling And Results</h2>
 <p>Android live status (Android mode):</p>
-<pre><code class="language-http">GET {{baseUrl}}/experiment/android/status?id={{experimentId}}
+<pre><code class="language-http">GET {{baseUrl}}/experiments/android/status?id={{experimentId}}
 </code></pre>
 <p>Final metrics (both modes):</p>
-<pre><code class="language-http">GET {{baseUrl}}/experiment/metrics?id={{experimentId}}
+<pre><code class="language-http">GET {{baseUrl}}/experiments/android/metrics?id={{experimentId}}
 </code></pre>
 <p>Segregated metrics endpoints:</p>
 <p>Backend/docker only:</p>
-<pre><code class="language-http">GET {{baseUrl}}/experiment/metrics/backend?id={{experimentId}}
+<pre><code class="language-http">GET {{baseUrl}}/experiments/backend/metrics?id={{experimentId}}
 </code></pre>
 <p>Android only:</p>
-<pre><code class="language-http">GET {{baseUrl}}/experiment/metrics/android?id={{experimentId}}
+<pre><code class="language-http">GET {{baseUrl}}/experiments/android/metrics?id={{experimentId}}
 </code></pre>
 <h2 id="fault-options-quick-list">Fault Options Quick List</h2>
 <p>Backend/docker: <code>network_delay</code>, <code>packet_loss</code>, <code>cpu_stress</code>, <code>memory_stress</code>, <code>kill</code>.</p>

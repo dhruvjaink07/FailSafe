@@ -3,7 +3,6 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -12,192 +11,6 @@ import (
 	"github.com/dhruvjaink07/failsafe/internal/models"
 	"github.com/dhruvjaink07/failsafe/internal/orchestrator"
 )
-
-func ExperimentStartHandler(orch *orchestrator.Orchestrator) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		var req StartRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			log.Println("JSON decode error:", err)
-			http.Error(w, "invalid json", http.StatusBadRequest)
-			return
-		}
-
-		if err := applyScenarioPreset(&req); err != nil {
-			log.Println("preset load error:", err)
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		if req.FaultType == "" || len(req.Targets) == 0 {
-			http.Error(w, "invalid request payload", http.StatusBadRequest)
-			return
-		}
-
-		var appCfg *orchestrator.AndroidAppConfig
-		if strings.EqualFold(req.TargetType, "android") && strings.TrimSpace(req.APK) != "" {
-			apkMeta, ok := getUploadedAPK(req.APK)
-			if !ok {
-				http.Error(w, "invalid apk reference: upload id not found", http.StatusBadRequest)
-				return
-			}
-			appCfg = &orchestrator.AndroidAppConfig{
-				APKPath:  apkMeta.Path,
-				Package:  apkMeta.Package,
-				Activity: apkMeta.Activity,
-			}
-		}
-
-		exp, err := orch.StartExperiment(
-			req.FaultType,
-			req.Targets,
-			req.TargetType,
-			req.ObservedEndpoints,
-			req.ObservationType,
-			req.Duration,
-			req.Adaptive,
-			req.StepIntensity,
-			req.MaxIntensity,
-			req.DependencyGraph,
-			req.TargetEndpointMap,
-			req.Scenario,
-			req.Expected,
-			req.AndroidRun.toOptions(),
-			appCfg,
-		)
-
-		log.Printf("REQ: %+v\n", req)
-		if err != nil {
-			log.Println("StartExperiment error:", err)
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		_ = json.NewEncoder(w).Encode(exp)
-	}
-}
-
-func ExperimentGetHandler(orch *orchestrator.Orchestrator) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.URL.Query().Get("id")
-		if id == "" {
-			http.Error(w, "missing id", http.StatusBadRequest)
-			return
-		}
-
-		exp, err := orch.GetExperiment(id)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		_ = json.NewEncoder(w).Encode(exp)
-	}
-}
-
-func ExperimentStopHandler(orch *orchestrator.Orchestrator) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		id := r.URL.Query().Get("id")
-		if id == "" {
-			http.Error(w, "missing id", http.StatusBadRequest)
-			return
-		}
-
-		if err := orch.StopExperiment(id); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		_, _ = w.Write([]byte("experiment stopped"))
-	}
-}
-
-func ExperimentMetricsHandler(orch *orchestrator.Orchestrator) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.URL.Query().Get("id")
-		if id == "" {
-			http.Error(w, "missing id", http.StatusBadRequest)
-			return
-		}
-
-		data, err := orch.GetMetrics(id)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		_ = json.NewEncoder(w).Encode(data)
-	}
-}
-
-func ExperimentBackendMetricsHandler(orch *orchestrator.Orchestrator) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.URL.Query().Get("id")
-		if id == "" {
-			http.Error(w, "missing id", http.StatusBadRequest)
-			return
-		}
-
-		data, err := orch.GetBackendMetrics(id)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		_ = json.NewEncoder(w).Encode(data)
-	}
-}
-
-func ExperimentAndroidMetricsHandler(orch *orchestrator.Orchestrator) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.URL.Query().Get("id")
-		if id == "" {
-			http.Error(w, "missing id", http.StatusBadRequest)
-			return
-		}
-
-		data, err := orch.GetAndroidMetrics(id)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		_ = json.NewEncoder(w).Encode(data)
-	}
-}
-
-func ExperimentAndroidStatusHandler(orch *orchestrator.Orchestrator) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		id := r.URL.Query().Get("id")
-		if id == "" {
-			http.Error(w, "missing id", http.StatusBadRequest)
-			return
-		}
-
-		status, err := orch.GetAndroidStatus(id)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(status)
-	}
-}
 
 type StartRequest struct {
 	FaultType         string
@@ -218,6 +31,28 @@ type StartRequest struct {
 	Expected          models.ExpectedState
 	AndroidRun        *AndroidRunRequest
 	APK               string
+	FrontendRun       *FrontendRunRequest
+}
+
+type FrontendRunRequest struct {
+	BaseURL         string
+	MetricsEndpoint string
+	TargetURLs      []string
+}
+
+func (f *FrontendRunRequest) toModel() *models.FrontendRunConfig {
+	if f == nil {
+		return nil
+	}
+	cfg := &models.FrontendRunConfig{
+		BaseURL:         strings.TrimSpace(f.BaseURL),
+		MetricsEndpoint: strings.TrimSpace(f.MetricsEndpoint),
+		TargetURLs:      append([]string(nil), f.TargetURLs...),
+	}
+	if cfg.BaseURL == "" && cfg.MetricsEndpoint == "" && len(cfg.TargetURLs) == 0 {
+		return nil
+	}
+	return cfg
 }
 
 type AndroidRunRequest struct {
@@ -283,6 +118,22 @@ func (s *StartRequest) UnmarshalJSON(data []byte) error {
 		APKSnake          string                  `json:"apk_id"`
 		UploadedAPKID     string                  `json:"uploadedApkId"`
 		UploadedAPKSnake  string                  `json:"uploaded_apk_id"`
+		FrontendRun       *struct {
+			BaseURL         string   `json:"baseUrl"`
+			BaseURLSnake    string   `json:"base_url"`
+			MetricsEndpoint string   `json:"metricsEndpoint"`
+			MetricsSnake    string   `json:"metrics_endpoint"`
+			TargetURLs      []string `json:"targetUrls"`
+			TargetURLsSnake []string `json:"target_urls"`
+		} `json:"frontendRun"`
+		FrontendRunSnake *struct {
+			BaseURL         string   `json:"baseUrl"`
+			BaseURLSnake    string   `json:"base_url"`
+			MetricsEndpoint string   `json:"metricsEndpoint"`
+			MetricsSnake    string   `json:"metrics_endpoint"`
+			TargetURLs      []string `json:"targetUrls"`
+			TargetURLsSnake []string `json:"target_urls"`
+		} `json:"frontend_run"`
 	}
 
 	var a Alias
@@ -292,7 +143,7 @@ func (s *StartRequest) UnmarshalJSON(data []byte) error {
 
 	s.FaultType = firstNonEmpty(a.FaultType, a.FaultTypeSnake)
 	s.Targets = a.Targets
-	s.TargetType = firstNonEmpty(a.TargetType, a.TargetTypeSnake)
+	s.TargetType = normalizeTargetType(firstNonEmpty(a.TargetType, a.TargetTypeSnake))
 	if len(a.ObservedEndpoints) > 0 {
 		s.ObservedEndpoints = a.ObservedEndpoints
 	} else {
@@ -352,13 +203,41 @@ func (s *StartRequest) UnmarshalJSON(data []byte) error {
 		}
 	}
 
+	frontendCfg := a.FrontendRun
+	if frontendCfg == nil {
+		frontendCfg = a.FrontendRunSnake
+	}
+	if frontendCfg != nil {
+		targetURLs := frontendCfg.TargetURLs
+		if len(targetURLs) == 0 {
+			targetURLs = frontendCfg.TargetURLsSnake
+		}
+		s.FrontendRun = &FrontendRunRequest{
+			BaseURL:         firstNonEmpty(frontendCfg.BaseURL, frontendCfg.BaseURLSnake),
+			MetricsEndpoint: firstNonEmpty(frontendCfg.MetricsEndpoint, frontendCfg.MetricsSnake),
+			TargetURLs:      targetURLs,
+		}
+	}
+
 	return nil
+}
+
+func normalizeTargetType(targetType string) string {
+	t := strings.ToLower(strings.TrimSpace(targetType))
+	switch t {
+	case "web":
+		return string(models.TargetFrontend)
+	case "backend":
+		return string(models.TargetDocker)
+	default:
+		return t
+	}
 }
 
 func firstNonEmpty(values ...string) string {
 	for _, v := range values {
 		if strings.TrimSpace(v) != "" {
-			return v
+			return strings.TrimSpace(v)
 		}
 	}
 	return ""
@@ -369,6 +248,25 @@ func firstNonNilBool(values ...*bool) *bool {
 		if v != nil {
 			return v
 		}
+	}
+	return nil
+}
+
+func requireExperimentID(r *http.Request) (string, error) {
+	id := strings.TrimSpace(r.URL.Query().Get("id"))
+	if id == "" {
+		return "", fmt.Errorf("missing id")
+	}
+	return id, nil
+}
+
+func ensureTargetType(orch ExperimentService, id string, expected models.TargetType) error {
+	targetType, err := orch.GetExperimentTargetType(id)
+	if err != nil {
+		return err
+	}
+	if normalizeTargetType(targetType) != string(expected) {
+		return fmt.Errorf("experiment %q belongs to target_type=%q", id, targetType)
 	}
 	return nil
 }

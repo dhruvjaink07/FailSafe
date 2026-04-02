@@ -48,18 +48,19 @@ Form-data fields:
 }
 ```
 
-## 3) Start Experiment (Shared Endpoint)
+## 3) Start Experiment (Platform Endpoints)
 
 ### Request
 
 ```http
-POST /experiment/start
+POST /experiments/backend/start
 ```
 
-This is one endpoint with two request modes:
+Use dedicated start endpoints by platform:
 
-- Docker mode: backend service/container resilience tests.
-- Android mode: APK/app resilience tests.
+- Docker mode: `POST /experiments/backend/start`
+- Android mode: `POST /experiments/android/start`
+- Frontend mode: `POST /experiments/frontend/start`
 
 ### Payload
 
@@ -191,7 +192,7 @@ Returns experiment object with id, state, phase, and metadata.
 ### Backend Testing Request Bodies
 
 
-Use these payloads directly for integration tests against `POST /experiment/start`.
+Use these payloads directly for integration tests against `POST /experiments/backend/start`.
 
 #### Example: Backend (Docker) Experiment Request
 
@@ -509,38 +510,24 @@ Android fault types:
 ### Request
 
 ```http
-GET /experiment/get?id={experiment_id}
+GET /experiments/backend/status?id={experiment_id}
 ```
 
 ### Response
 
 Experiment metadata object (`state`, `phase`, timestamps, baseline fields, etc.).
 
-## 5) Get Metrics (Compatibility)
+## 5) Get Backend Metrics
 
 ### Request
 
 ```http
-GET /experiment/metrics?id={experiment_id}
+GET /experiments/backend/metrics?id={experiment_id}
 ```
 
 ### Response
 
-Compatibility endpoint. It routes by experiment type internally.
-
-For Android experiments, response includes:
-
-- `health`
-- `recovery`
-- `stability`
-- `state_transitions`
-- `timeline`
-- `replay_hints`
-- `validation`
-- `summary`
-- `scenario`
-
-For backend/docker experiments, response includes:
+Backend/docker response includes:
 
 - `endpoints`
 - `blast_radius_percent`
@@ -549,38 +536,25 @@ For backend/docker experiments, response includes:
 - `resilience_threshold`
 - `timeline`
 
-## 6) Get Backend Metrics (Segregated)
+## 6) Get Android Metrics
 
 ### Request
 
 ```http
-GET /experiment/metrics/backend?id={experiment_id}
-```
-
-### Behavior
-
-- Returns only backend/docker metrics shape.
-- Returns `400` if experiment id belongs to Android run.
-
-## 7) Get Android Metrics (Segregated)
-
-### Request
-
-```http
-GET /experiment/metrics/android?id={experiment_id}
+GET /experiments/android/metrics?id={experiment_id}
 ```
 
 ### Behavior
 
 - Returns only Android metrics shape.
-- Returns `400` if experiment id belongs to backend/docker run.
+- Returns `400` if experiment id belongs to non-Android run.
 
-## 8) Android Live Status
+## 7) Android Live Status
 
 ### Request
 
 ```http
-GET /experiment/android/status?id={experiment_id}
+GET /experiments/android/status?id={experiment_id}
 ```
 
 ### Response
@@ -594,12 +568,12 @@ Lightweight polling payload containing:
 - `timeline`
 - recent transitions and fault events
 
-## 9) Stop Experiment
+## 8) Stop Backend Experiment
 
 ### Request
 
 ```http
-POST /experiment/stop?id={experiment_id}
+POST /experiments/backend/stop?id={experiment_id}
 ```
 
 ### Response
@@ -608,7 +582,7 @@ POST /experiment/stop?id={experiment_id}
 experiment stopped
 ```
 
-## 10) Scenario Presets
+## 9) Scenario Presets
 
 ### Request
 

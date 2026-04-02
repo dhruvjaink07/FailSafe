@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"errors"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/dhruvjaink07/failsafe/internal/models"
@@ -71,6 +72,32 @@ func (o *Orchestrator) GetAndroidStatus(id string) (map[string]interface{}, erro
 	}
 
 	hadImpact := len(firstImpact) > 0
+	if !hadImpact && len(flat) > 0 {
+		if fallbackImpact, fallbackRecovery := inferAndroidImpactAndRecovery(flat, exp.FaultStartedAt); !fallbackImpact.IsZero() || !fallbackRecovery.IsZero() {
+			endpoint := androidPrimaryEndpoint(exp, flat)
+			if !fallbackImpact.IsZero() {
+				firstImpact[endpoint] = fallbackImpact
+				hadImpact = true
+			}
+			if !fallbackRecovery.IsZero() {
+				recovery[endpoint] = fallbackRecovery
+			}
+			o.mu.Lock()
+			if _, ok := o.firstImpact[id]; !ok {
+				o.firstImpact[id] = make(map[string]time.Time)
+			}
+			if _, ok := o.recoveryAt[id]; !ok {
+				o.recoveryAt[id] = make(map[string]time.Time)
+			}
+			if !fallbackImpact.IsZero() {
+				o.firstImpact[id][endpoint] = fallbackImpact
+			}
+			if !fallbackRecovery.IsZero() {
+				o.recoveryAt[id][endpoint] = fallbackRecovery
+			}
+			o.mu.Unlock()
+		}
+	}
 	health := "healthy"
 	if currentState == "not_running" || currentState == "crash" || currentState == "anr" {
 		health = "down"
@@ -154,4 +181,46 @@ func (o *Orchestrator) GetAndroidStatus(id string) (map[string]interface{}, erro
 	}
 
 	return status, nil
+}
+
+func androidPrimaryEndpoint(exp *models.Experiment, flat []models.MetricSample) string {
+	if len(flat) > 0 && strings.TrimSpace(flat[0].Endpoint) != "" {
+		return strings.TrimSpace(flat[0].Endpoint)
+	}
+	if exp != nil && len(exp.Targets) > 0 {
+		return strings.TrimSpace(exp.Targets[0])
+	}
+	if exp != nil && strings.TrimSpace(exp.Package) != "" {
+		return strings.TrimSpace(exp.Package)
+	}
+	return "android-target"
+}
+
+func inferAndroidImpactAndRecovery(samples []models.MetricSample, faultStart time.Time) (time.Time, time.Time) {
+	if len(samples) == 0 {
+		return time.Time{}, time.Time{}
+	}
+
+	impact := time.Time{}
+	recovery := time.Time{}
+	seenDown := false
+	prevState := ""
+
+	for _, sample := range samples {
+		if !faultStart.IsZero() && sample.Timestamp.Before(faultStart) {
+			continue
+		}
+		state := classifyAndroidState(sample)
+		if !seenDown && (state == "not_running" || state == "crash" || state == "anr" || sample.Crash || sample.ANR) {
+			impact = sample.Timestamp
+			seenDown = true
+		}
+		if seenDown && prevState != "running" && state == "running" && !sample.Crash && !sample.ANR {
+			recovery = sample.Timestamp
+			break
+		}
+		prevState = state
+	}
+
+	return impact, recovery
 }
