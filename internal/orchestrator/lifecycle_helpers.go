@@ -107,12 +107,10 @@ func (o *Orchestrator) completeExperiment(id string) {
 
 		if metrics, err := o.GetMetrics(id); err == nil {
 			if data, ok := metrics.(map[string]interface{}); ok {
-				_ = o.db.InsertAggregatedMetrics(id, data)
+				_ = o.db.InsertPlatformStatusMetrics(exp, data)
 				if exp.TargetType == "android" || exp.ObservationType == "android" {
 					_ = o.db.InsertAndroidExperimentReport(id, data)
 					_ = o.db.InsertAndroidExperimentSummary(id, data)
-				} else {
-					_ = o.db.InsertExperimentSummary(id, data)
 				}
 			}
 		}
@@ -121,11 +119,29 @@ func (o *Orchestrator) completeExperiment(id string) {
 
 func (o *Orchestrator) GetExperiment(id string) (map[string]interface{}, error) {
 	o.mu.Lock()
-	defer o.mu.Unlock()
-
 	exp, ok := o.experiments[id]
+	o.mu.Unlock()
+
 	if !ok {
-		return nil, errors.New("experiment not found")
+		if o.db == nil {
+			return nil, errors.New("experiment not found")
+		}
+
+		targetType, err := o.db.GetExperimentTargetType(id)
+		if err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(targetType) == "" {
+			return nil, errors.New("experiment not found")
+		}
+
+		exp, err = o.db.GetExperimentSnapshot(id, targetType)
+		if err != nil {
+			return nil, err
+		}
+		if exp == nil {
+			return nil, errors.New("experiment not found")
+		}
 	}
 
 	// Prepare fault_injection_history for status output (v1 and v2)
@@ -249,7 +265,48 @@ func (o *Orchestrator) StopExperiment(id string) error {
 	exp, ok := o.experiments[id]
 	if !ok {
 		o.mu.Unlock()
-		return errors.New("experiment not found")
+		if o.db == nil {
+			return errors.New("experiment not found")
+		}
+
+		targetType, err := o.db.GetExperimentTargetType(id)
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(targetType) == "" {
+			return errors.New("experiment not found")
+		}
+
+		exp, err = o.db.GetExperimentSnapshot(id, targetType)
+		if err != nil {
+			return err
+		}
+		if exp == nil {
+			return errors.New("experiment not found")
+		}
+
+		exp.State = models.StateFailed
+		exp.Phase = models.PhaseCompleted
+		exp.UpdatedAt = time.Now()
+
+		_ = o.db.UpdateExperimentResults(exp)
+		_ = o.db.InsertPlatformExperiment(exp)
+
+		if payload, err := o.db.GetPlatformStatusPayload(targetType, id); err == nil && payload != nil {
+			payload["state"] = string(exp.State)
+			payload["phase"] = string(exp.Phase)
+
+			if expMap, ok := payload["experiment"].(map[string]interface{}); ok {
+				expMap["state"] = string(exp.State)
+				expMap["phase"] = string(exp.Phase)
+				expMap["updated_at"] = exp.UpdatedAt
+				payload["experiment"] = expMap
+			}
+
+			_ = o.db.InsertPlatformStatusMetrics(exp, payload)
+		}
+
+		return nil
 	}
 
 	monitor := o.monitors[id]
@@ -266,6 +323,11 @@ func (o *Orchestrator) StopExperiment(id string) error {
 	if o.db != nil {
 		_ = o.flushMetricsBatch(id)
 		_ = o.db.UpdateExperimentResults(exp)
+		if metrics, err := o.GetMetrics(id); err == nil {
+			if data, ok := metrics.(map[string]interface{}); ok {
+				_ = o.db.InsertPlatformStatusMetrics(exp, data)
+			}
+		}
 	}
 
 	return nil
@@ -273,11 +335,22 @@ func (o *Orchestrator) StopExperiment(id string) error {
 
 func (o *Orchestrator) GetExperimentTargetType(id string) (string, error) {
 	o.mu.Lock()
-	defer o.mu.Unlock()
-
 	exp, ok := o.experiments[id]
+	o.mu.Unlock()
+
 	if !ok {
-		return "", errors.New("experiment not found")
+		if o.db == nil {
+			return "", errors.New("experiment not found")
+		}
+
+		targetType, err := o.db.GetExperimentTargetType(id)
+		if err != nil {
+			return "", err
+		}
+		if strings.TrimSpace(targetType) == "" {
+			return "", errors.New("experiment not found")
+		}
+		return targetType, nil
 	}
 
 	targetType := strings.ToLower(strings.TrimSpace(exp.TargetType))
@@ -305,6 +378,10 @@ func (o *Orchestrator) AddFrontendMetrics(data []models.FrontendMetrics) {
 			mon.RecordIngest(metric)
 		}
 	}
+
+	if o.db != nil {
+		_ = o.db.InsertFrontendMetricsBatch(data)
+	}
 }
 
 func (o *Orchestrator) GetFrontendMetrics(id string) (interface{}, error) {
@@ -319,6 +396,19 @@ func (o *Orchestrator) GetFrontendMetrics(id string) (interface{}, error) {
 	o.mu.Lock()
 	frontend := append([]models.FrontendMetrics(nil), o.frontendMetrics[id]...)
 	o.mu.Unlock()
+
+	if len(frontend) == 0 && o.db != nil {
+		dbMetrics, err := o.db.GetFrontendMetricsRaw(id)
+		if err == nil && len(dbMetrics) > 0 {
+			frontend = dbMetrics
+		}
+
+		if len(frontend) == 0 {
+			if payload, err := o.db.GetPlatformStatusPayload(targetType, id); err == nil && payload != nil {
+				return payload, nil
+			}
+		}
+	}
 
 	frontendScoreMap := computeFrontendScore(frontend)
 

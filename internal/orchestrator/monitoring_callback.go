@@ -75,13 +75,31 @@ func (o *Orchestrator) flushMetricsBatch(id string) error {
 	o.mu.Lock()
 	batch := append([]models.MetricSample(nil), o.metricBuffer[id]...)
 	o.metricBuffer[id] = o.metricBuffer[id][:0]
+	targetType := ""
+	var exp *models.Experiment
+	if e, ok := o.experiments[id]; ok && e != nil {
+		exp = e
+		targetType = exp.TargetType
+	}
 	o.mu.Unlock()
 
 	if o.db == nil || len(batch) == 0 {
 		return nil
 	}
 
-	return o.db.InsertMetricsBatch(batch, id)
+	if err := o.db.InsertPlatformRawMetrics(targetType, batch, id); err != nil {
+		return err
+	}
+
+	if exp != nil {
+		if metrics, err := o.GetMetrics(id); err == nil {
+			if data, ok := metrics.(map[string]interface{}); ok {
+				_ = o.db.InsertPlatformStatusMetrics(exp, data)
+			}
+		}
+	}
+
+	return nil
 }
 
 func (o *Orchestrator) startMetricsFlusher(id string) {

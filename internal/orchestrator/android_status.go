@@ -14,7 +14,29 @@ func (o *Orchestrator) GetAndroidStatus(id string) (map[string]interface{}, erro
 	exp, ok := o.experiments[id]
 	if !ok {
 		o.mu.Unlock()
-		return nil, errors.New("experiment not found")
+		if o.db == nil {
+			return nil, errors.New("experiment not found")
+		}
+
+		targetType, err := o.db.GetExperimentTargetType(id)
+		if err != nil {
+			return nil, err
+		}
+		if targetType == "" {
+			return nil, errors.New("experiment not found")
+		}
+		if targetType != "android" {
+			return nil, errors.New("experiment is not android")
+		}
+
+		payload, err := o.db.GetPlatformStatusPayload(targetType, id)
+		if err != nil {
+			return nil, err
+		}
+		if payload == nil {
+			return nil, errors.New("no status found")
+		}
+		return payload, nil
 	}
 
 	if exp.TargetType != string(models.TargetAndroid) && exp.ObservationType != "android" {

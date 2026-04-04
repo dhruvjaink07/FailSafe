@@ -212,21 +212,47 @@ func (o *Orchestrator) GetMetrics(id string) (interface{}, error) {
 func (o *Orchestrator) GetBackendMetrics(id string) (interface{}, error) {
 	o.mu.Lock()
 	exp, exists := o.experiments[id]
+	endpointMap := o.metrics[id]
+	o.mu.Unlock()
+
 	if !exists {
-		o.mu.Unlock()
-		return nil, errors.New("experiment not found")
+		if o.db == nil {
+			return nil, errors.New("experiment not found")
+		}
+
+		targetType, err := o.db.GetExperimentTargetType(id)
+		if err != nil {
+			return nil, err
+		}
+		if targetType == "" {
+			return nil, errors.New("experiment not found")
+		}
+		if targetType == "android" {
+			return nil, errors.New("experiment is android; use android metrics endpoint")
+		}
+
+		payload, err := o.db.GetPlatformStatusPayload(targetType, id)
+		if err != nil {
+			return nil, err
+		}
+		if payload == nil {
+			return nil, errors.New("no metrics found")
+		}
+		return payload, nil
 	}
+
 	if exp.TargetType == "android" || exp.ObservationType == "android" {
-		o.mu.Unlock()
 		return nil, errors.New("experiment is android; use android metrics endpoint")
 	}
 
-	endpointMap, exists := o.metrics[id]
-	if !exists {
-		o.mu.Unlock()
+	if len(endpointMap) == 0 {
+		if o.db != nil {
+			if payload, err := o.db.GetPlatformStatusPayload(exp.TargetType, id); err == nil && payload != nil {
+				return payload, nil
+			}
+		}
 		return nil, errors.New("no metrics found")
 	}
-	o.mu.Unlock()
 
 	return o.buildBackendMetrics(id, exp, endpointMap), nil
 }
@@ -234,15 +260,44 @@ func (o *Orchestrator) GetBackendMetrics(id string) (interface{}, error) {
 func (o *Orchestrator) GetAndroidMetrics(id string) (interface{}, error) {
 	o.mu.Lock()
 	exp, exists := o.experiments[id]
+	o.mu.Unlock()
+
 	if !exists {
-		o.mu.Unlock()
-		return nil, errors.New("experiment not found")
+		if o.db == nil {
+			return nil, errors.New("experiment not found")
+		}
+		targetType, err := o.db.GetExperimentTargetType(id)
+		if err != nil {
+			return nil, err
+		}
+		if targetType == "" {
+			return nil, errors.New("experiment not found")
+		}
+		if targetType != "android" {
+			return nil, errors.New("experiment is backend; use backend metrics endpoint")
+		}
+		payload, err := o.db.GetPlatformStatusPayload(targetType, id)
+		if err != nil {
+			return nil, err
+		}
+		if payload == nil {
+			return nil, errors.New("no metrics found")
+		}
+		return payload, nil
 	}
+
 	if exp.TargetType != "android" && exp.ObservationType != "android" {
-		o.mu.Unlock()
 		return nil, errors.New("experiment is backend; use backend metrics endpoint")
 	}
+
+	o.mu.Lock()
+	hasData := len(o.metrics[id]) > 0
 	o.mu.Unlock()
+	if !hasData && o.db != nil {
+		if payload, err := o.db.GetPlatformStatusPayload("android", id); err == nil && payload != nil {
+			return payload, nil
+		}
+	}
 
 	return o.getAndroidMetrics(id), nil
 }

@@ -56,8 +56,11 @@ func (p *Postgres) InsertExperiment(exp *models.Experiment) error {
 		exp.DependencyGraph,
 		exp.TargetEndpointMap,
 	)
+	if err != nil {
+		return err
+	}
 
-	return err
+	return p.InsertPlatformExperiment(exp)
 }
 
 func (p *Postgres) UpdateBaseline(exp *models.Experiment) error {

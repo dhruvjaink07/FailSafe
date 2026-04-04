@@ -108,3 +108,122 @@ CREATE TABLE IF NOT EXISTS android_experiment_report (
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS backend_experiments (
+    experiment_id UUID PRIMARY KEY,
+    fault_type TEXT,
+    state TEXT,
+    phase TEXT,
+    targets JSONB,
+    observed_endpoints JSONB,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS android_experiments (
+    experiment_id UUID PRIMARY KEY,
+    fault_type TEXT,
+    state TEXT,
+    phase TEXT,
+    package_name TEXT,
+    activity TEXT,
+    apk_path TEXT,
+    targets JSONB,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS frontend_experiments (
+    experiment_id UUID PRIMARY KEY,
+    fault_type TEXT,
+    state TEXT,
+    phase TEXT,
+    base_url TEXT,
+    metrics_endpoint TEXT,
+    target_urls JSONB,
+    targets JSONB,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS backend_metrics_raw (
+    id BIGSERIAL PRIMARY KEY,
+    experiment_id UUID NOT NULL,
+    endpoint TEXT,
+    timestamp TIMESTAMP,
+    latency_ms BIGINT,
+    status INT,
+    intensity INT,
+    container_cpu FLOAT,
+    container_memory FLOAT
+);
+
+CREATE TABLE IF NOT EXISTS android_metrics_raw (
+    id BIGSERIAL PRIMARY KEY,
+    experiment_id UUID NOT NULL,
+    endpoint TEXT,
+    timestamp TIMESTAMP,
+    app_state TEXT,
+    crash BOOLEAN,
+    anr BOOLEAN,
+    crash_reason TEXT,
+    memory_mb FLOAT,
+    frame_drops INT,
+    latency_ms BIGINT,
+    status INT,
+    intensity INT
+);
+
+CREATE TABLE IF NOT EXISTS frontend_metrics_raw (
+    id BIGSERIAL PRIMARY KEY,
+    experiment_id UUID NOT NULL,
+    phase TEXT,
+    page TEXT,
+    lcp FLOAT,
+    cls FLOAT,
+    inp FLOAT,
+    long_tasks INT,
+    errors INT,
+    unhandled_rejections INT,
+    api_calls JSONB,
+    event_timestamp BIGINT,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS backend_status_metrics (
+    experiment_id UUID PRIMARY KEY,
+    state TEXT,
+    phase TEXT,
+    blast_radius FLOAT,
+    cascade_depth INT,
+    system_severity TEXT,
+    failsafe_score FLOAT,
+    status_payload JSONB,
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS android_status_metrics (
+    experiment_id UUID PRIMARY KEY,
+    state TEXT,
+    phase TEXT,
+    health_status TEXT,
+    severity TEXT,
+    recovered BOOLEAN,
+    recovery_time_ms BIGINT,
+    validation_passed BOOLEAN,
+    summary_result TEXT,
+    failsafe_score FLOAT,
+    status_payload JSONB,
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS frontend_status_metrics (
+    experiment_id UUID PRIMARY KEY,
+    state TEXT,
+    phase TEXT,
+    frontend_score FLOAT,
+    frontend_status TEXT,
+    failsafe_score FLOAT,
+    status_payload JSONB,
+    updated_at TIMESTAMP DEFAULT NOW()
+);
