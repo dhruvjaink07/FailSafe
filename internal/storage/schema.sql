@@ -1,5 +1,6 @@
 CREATE TABLE IF NOT EXISTS experiments (
     id UUID PRIMARY KEY,
+    api_key_id UUID,
     fault_type TEXT,
     state TEXT,
     phase TEXT,
@@ -11,6 +12,17 @@ CREATE TABLE IF NOT EXISTS experiments (
     baseline JSONB,
     dependency_graph JSONB,
     target_endpoint_map JSONB
+);
+
+ALTER TABLE IF EXISTS experiments
+    ADD COLUMN IF NOT EXISTS api_key_id UUID;
+
+CREATE TABLE IF NOT EXISTS api_keys (
+    id UUID PRIMARY KEY,
+    key_hash TEXT UNIQUE NOT NULL,
+    environment TEXT NOT NULL,
+    role TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS metrics_raw (

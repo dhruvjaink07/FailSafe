@@ -29,16 +29,21 @@ func (p *Postgres) InsertExperiment(exp *models.Experiment) error {
 
 	query := `
 	INSERT INTO experiments (
-		id, fault_type, state, phase,
+		id, api_key_id, fault_type, state, phase,
 		created_at, updated_at,
 		max_intensity, breaking_intensity, max_stable_intensity,
 		baseline, dependency_graph, target_endpoint_map
 	) VALUES (
-		$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12
+		$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13
 	)`
+	var apiKeyID any
+	if strings.TrimSpace(exp.APIKeyID) != "" {
+		apiKeyID = exp.APIKeyID
+	}
 
 	_, err := p.Pool.Exec(context.Background(), query,
 		exp.ID,
+		apiKeyID,
 		exp.FaultType,
 		exp.State,
 		exp.Phase,

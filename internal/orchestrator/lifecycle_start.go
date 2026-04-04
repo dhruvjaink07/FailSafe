@@ -42,12 +42,21 @@ func (o *Orchestrator) StartExperiment(
 	androidOptions *AndroidRunOptions,
 	androidApp *AndroidAppConfig,
 	frontendRun *models.FrontendRunConfig,
+	apiCtx *models.APIContext,
 ) (*models.Experiment, error) {
 	if duration <= 0 {
 		return nil, errors.New("invalid duration")
 	}
 	if err := o.requireFrontendRunConfig(targetType, frontendRun); err != nil {
 		return nil, err
+	}
+	if apiCtx != nil {
+		if strings.EqualFold(apiCtx.Role, "viewer") {
+			return nil, errors.New("not allowed")
+		}
+		if strings.EqualFold(apiCtx.Env, "prod") && maxIntensity > 60 {
+			return nil, errors.New("intensity too high for prod")
+		}
 	}
 
 	id := uuid.New().String()
@@ -96,6 +105,9 @@ func (o *Orchestrator) StartExperiment(
 	}
 
 	exp := o.createExperiment(id, targets, targetType, observationType, faultType, duration, adaptive, stepIntensity, maxIntensity, useDeps, targetMap)
+	if apiCtx != nil {
+		exp.APIKeyID = apiCtx.KeyID
+	}
 	exp.Scenario = scheduledFaults
 	exp.Expected = expected
 	exp.FrontendRun = frontendRun

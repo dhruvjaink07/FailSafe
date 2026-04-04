@@ -32,6 +32,7 @@ http://localhost:8000
 | POST | `/experiments/frontend/stop?id={id}` | query `id` | Stops frontend run. |
 | GET | `/experiments/frontend/metrics?id={id}` | query `id` | Returns frontend metrics and score payload. |
 | POST | `/frontend/metrics` | JSON `FrontendMetricsBatch` | Browser collector ingestion endpoint. |
+| POST | `/internal/api-keys/create` | JSON `CreateAPIKeyRequest` | Key provisioning endpoint (currently open, no API key header required). |
 | GET | `/scenarios/presets` | none | Lists scenario presets. |
 
 ## Shared Experiment Start Body
@@ -62,6 +63,24 @@ Common optional fields:
 - `android_run` or `androidRun`
 - `apk`, `apk_id`, `uploadedApkId`, or `uploaded_apk_id`
 - `frontend_run` or `frontendRun`
+
+Protected routes require `x-api-key`:
+
+- `/experiments/backend/start`, `/experiments/backend/stop`
+- `/experiments/android/start`, `/experiments/android/stop`
+- `/experiments/frontend/start`, `/experiments/frontend/stop`
+- all `/experiments/*/metrics` routes
+
+Valid roles:
+
+- `viewer` can read metrics only
+- `engineer` can start and stop experiments
+- `admin` can start, stop, and provision keys
+
+Valid environments:
+
+- `dev`
+- `prod`
 
 ## Platform-Specific Start Requirements
 
@@ -183,6 +202,36 @@ Android metrics fields to verify:
     "metrics_endpoint": "http://localhost:8000/frontend/metrics",
     "target_urls": ["/api/fast", "/api/slow"]
   }
+}
+```
+
+### API Key Creation
+
+`POST /internal/api-keys/create`
+
+Headers:
+
+- `Content-Type: application/json`
+
+Authorization rules:
+
+- no auth restriction on creation right now (any caller can create keys)
+
+Request body:
+
+```json
+{
+  "environment": "dev",
+  "role": "engineer",
+  "name": "team-a"
+}
+```
+
+Response:
+
+```json
+{
+  "api_key": "fs_..."
 }
 ```
 

@@ -36,6 +36,10 @@ func ExperimentAndroidStartHandler(orch ExperimentService) http.HandlerFunc {
 			http.Error(w, "invalid request payload", http.StatusBadRequest)
 			return
 		}
+		var apiCtx *models.APIContext
+		if ctx, ok := APIContextFromRequest(r); ok {
+			apiCtx = &ctx
+		}
 
 		var appCfg *orchestrator.AndroidAppConfig
 		if strings.TrimSpace(req.APK) != "" {
@@ -68,6 +72,7 @@ func ExperimentAndroidStartHandler(orch ExperimentService) http.HandlerFunc {
 			req.AndroidRun.toOptions(),
 			appCfg,
 			nil,
+			apiCtx,
 		)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)

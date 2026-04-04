@@ -35,6 +35,11 @@ func ExperimentBackendStartHandler(orch ExperimentService) http.HandlerFunc {
 			return
 		}
 
+		var apiCtx *models.APIContext
+		if ctx, ok := APIContextFromRequest(r); ok {
+			apiCtx = &ctx
+		}
+
 		exp, err := orch.StartExperiment(
 			req.FaultType,
 			req.Targets,
@@ -52,6 +57,7 @@ func ExperimentBackendStartHandler(orch ExperimentService) http.HandlerFunc {
 			nil,
 			nil,
 			req.FrontendRun.toModel(),
+			apiCtx,
 		)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)

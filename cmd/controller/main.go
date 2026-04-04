@@ -43,21 +43,30 @@ func main() {
 	http.HandleFunc("/scenarios/presets", handlers.ScenarioPresetsHandler())
 	http.HandleFunc("/frontend/metrics", handlers.FrontendMetricsHandler(orch))
 
+	startRoles := []string{"engineer", "admin"}
+	metricsRoles := []string{"viewer", "engineer", "admin"}
+	keyCreateRoles := []string{"engineer", "admin"}
+	wrap := func(action string, roles []string, next http.HandlerFunc) http.HandlerFunc {
+		return handlers.RequireAPIKey(db, roles, action, next)
+	}
+	_ = keyCreateRoles
+	http.HandleFunc("/internal/api-keys/create", handlers.CreateAPIKeyHandler(db, os.Getenv("API_KEY_BOOTSTRAP_TOKEN")))
+
 	// Platform-scoped routes for lifecycle/status/metrics.
-	http.HandleFunc("/experiments/backend/start", handlers.ExperimentBackendStartHandler(orch))
+	http.HandleFunc("/experiments/backend/start", wrap("start_experiment", startRoles, handlers.ExperimentBackendStartHandler(orch)))
 	http.HandleFunc("/experiments/backend/status", handlers.ExperimentBackendStatusHandler(orch))
-	http.HandleFunc("/experiments/backend/stop", handlers.ExperimentBackendStopHandler(orch))
-	http.HandleFunc("/experiments/backend/metrics", handlers.ExperimentBackendMetricsHandler(orch))
+	http.HandleFunc("/experiments/backend/stop", wrap("stop_experiment", startRoles, handlers.ExperimentBackendStopHandler(orch)))
+	http.HandleFunc("/experiments/backend/metrics", wrap("read_metrics", metricsRoles, handlers.ExperimentBackendMetricsHandler(orch)))
 
-	http.HandleFunc("/experiments/android/start", handlers.ExperimentAndroidStartHandler(orch))
+	http.HandleFunc("/experiments/android/start", wrap("start_experiment", startRoles, handlers.ExperimentAndroidStartHandler(orch)))
 	http.HandleFunc("/experiments/android/status", handlers.ExperimentAndroidStatusHandler(orch))
-	http.HandleFunc("/experiments/android/stop", handlers.ExperimentAndroidStopHandler(orch))
-	http.HandleFunc("/experiments/android/metrics", handlers.ExperimentAndroidMetricsHandler(orch))
+	http.HandleFunc("/experiments/android/stop", wrap("stop_experiment", startRoles, handlers.ExperimentAndroidStopHandler(orch)))
+	http.HandleFunc("/experiments/android/metrics", wrap("read_metrics", metricsRoles, handlers.ExperimentAndroidMetricsHandler(orch)))
 
-	http.HandleFunc("/experiments/frontend/start", handlers.ExperimentFrontendStartHandler(orch))
+	http.HandleFunc("/experiments/frontend/start", wrap("start_experiment", startRoles, handlers.ExperimentFrontendStartHandler(orch)))
 	http.HandleFunc("/experiments/frontend/status", handlers.ExperimentFrontendStatusHandler(orch))
-	http.HandleFunc("/experiments/frontend/stop", handlers.ExperimentFrontendStopHandler(orch))
-	http.HandleFunc("/experiments/frontend/metrics", handlers.ExperimentFrontendMetricsHandler(orch))
+	http.HandleFunc("/experiments/frontend/stop", wrap("stop_experiment", startRoles, handlers.ExperimentFrontendStopHandler(orch)))
+	http.HandleFunc("/experiments/frontend/metrics", wrap("read_metrics", metricsRoles, handlers.ExperimentFrontendMetricsHandler(orch)))
 	http.HandleFunc("/experiments/frontend/fault-command", handlers.ExperimentFrontendFaultCommandHandler(orch))
 
 	log.Println("Server running on :8000")

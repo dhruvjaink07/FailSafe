@@ -35,7 +35,8 @@ const (
 )
 
 type Experiment struct {
-	ID string `json:"id"`
+	ID       string `json:"id"`
+	APIKeyID string `json:"api_key_id,omitempty"`
 
 	// Observation target (entrypoint of system)
 	ObservedEndpoints []string `json:"observed_endpoints"`
@@ -85,6 +86,12 @@ type FrontendRunConfig struct {
 	BaseURL         string   `json:"base_url,omitempty"`
 	MetricsEndpoint string   `json:"metrics_endpoint,omitempty"`
 	TargetURLs      []string `json:"target_urls,omitempty"`
+}
+
+type APIContext struct {
+	KeyID string `json:"key_id"`
+	Env   string `json:"env"`
+	Role  string `json:"role"`
 }
 
 type FaultTrigger struct {

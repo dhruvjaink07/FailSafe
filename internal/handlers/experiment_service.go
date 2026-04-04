@@ -23,6 +23,7 @@ type ExperimentService interface {
 		androidOptions *orchestrator.AndroidRunOptions,
 		androidApp *orchestrator.AndroidAppConfig,
 		frontendRun *models.FrontendRunConfig,
+		apiCtx *models.APIContext,
 	) (*models.Experiment, error)
 	GetExperiment(id string) (map[string]interface{}, error)
 	StopExperiment(id string) error

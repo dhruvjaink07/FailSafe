@@ -70,6 +70,7 @@ func (f *fakeExperimentService) StartExperiment(
 	androidOptions *orchestrator.AndroidRunOptions,
 	androidApp *orchestrator.AndroidAppConfig,
 	frontendRun *models.FrontendRunConfig,
+	apiCtx *models.APIContext,
 ) (*models.Experiment, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
