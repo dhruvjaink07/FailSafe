@@ -11,6 +11,7 @@ const FRONTEND_METRICS_ENDPOINT =
   process.env.FAILSAFE_FRONTEND_ENDPOINT || "http://localhost:8000/frontend/metrics";
 const CONTROLLER_BASE_URL =
   process.env.FAILSAFE_CONTROLLER_URL || "http://localhost:8000";
+const PW_HEADLESS = String(process.env.PW_HEADLESS || "false").toLowerCase() === "true";
 
 const SCENARIO = buildDefaultScenario();
 
@@ -76,6 +77,10 @@ async function fetchExperimentFrontendConfig(controllerBaseUrl, experimentId) {
 
 async function resolveRuntimeConfig() {
   let experimentConfig = null;
+  const rawEnvTargetUrls = (process.env.FAILSAFE_TARGET_URLS || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
 
   if (!process.env.BASE_URL || !process.env.FAILSAFE_FRONTEND_ENDPOINT) {
     try {
@@ -99,6 +104,7 @@ async function resolveRuntimeConfig() {
     FRONTEND_METRICS_ENDPOINT;
 
   const targetUrls =
+    (rawEnvTargetUrls.length > 0 && normalizeTargetUrls(rawEnvTargetUrls)) ||
     (experimentConfig && experimentConfig.targetUrls.length > 0 &&
       experimentConfig.targetUrls) ||
     SCENARIO.chaos.targetUrls;
@@ -289,9 +295,21 @@ async function removeChaos(context, page) {
 
 async function run() {
   const runtimeConfig = await resolveRuntimeConfig();
-  const browser = await chromium.launch({ headless: false });
+  const browser = await chromium.launch({ headless: PW_HEADLESS });
   const context = await browser.newContext();
   const page = await context.newPage();
+
+  await page.exposeFunction("__FAILSAFE_NODE_POST_METRICS__", async (metrics) => {
+    const response = await fetch(runtimeConfig.frontendMetricsEndpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ metrics }),
+    });
+    if (!response.ok) {
+      throw new Error(`frontend metrics post failed (${response.status})`);
+    }
+    return true;
+  });
 
   await page.addInitScript((expId) => {
     window.__FAILSAFE_EXPERIMENT_ID__ = expId;

@@ -99,6 +99,7 @@ func (o *Orchestrator) completeExperiment(id string) {
 	if monitor != nil {
 		monitor.Stop()
 	}
+	o.stopFrontendRunner(id)
 
 	if o.db != nil {
 		_ = o.flushMetricsBatch(id)
@@ -260,6 +261,7 @@ func (o *Orchestrator) StopExperiment(id string) error {
 	if monitor != nil {
 		monitor.Stop()
 	}
+	o.stopFrontendRunner(id)
 
 	if o.db != nil {
 		_ = o.flushMetricsBatch(id)

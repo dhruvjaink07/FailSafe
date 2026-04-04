@@ -46,6 +46,9 @@ func (o *Orchestrator) StartExperiment(
 	if duration <= 0 {
 		return nil, errors.New("invalid duration")
 	}
+	if err := o.requireFrontendRunConfig(targetType, frontendRun); err != nil {
+		return nil, err
+	}
 
 	id := uuid.New().String()
 	resolvedAndroidApp := &AndroidAppConfig{
@@ -128,6 +131,9 @@ func (o *Orchestrator) StartExperiment(
 	o.setPhase(id, models.PhaseInjecting)
 	monitor.Start(id, observedEndpoints)
 	o.startMetricsFlusher(id)
+	if isFrontendOnly {
+		o.startFrontendRunner(id, exp)
+	}
 	go o.runTimeline(id)
 
 	return exp, nil

@@ -1,6 +1,14 @@
 "use strict";
 
 (function initFailSafeSender(globalObj) {
+  async function postViaNodeBridge(metrics) {
+    if (typeof globalObj.__FAILSAFE_NODE_POST_METRICS__ !== "function") {
+      return false;
+    }
+    await globalObj.__FAILSAFE_NODE_POST_METRICS__(metrics);
+    return true;
+  }
+
   function createSender(options) {
     var cfg = Object.assign(
       {
@@ -42,6 +50,11 @@
     }
 
     async function postBatch(metrics) {
+      var sentByBridge = await postViaNodeBridge(metrics);
+      if (sentByBridge) {
+        return;
+      }
+
       var response = await fetch(cfg.endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

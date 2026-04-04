@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"os/exec"
 	"sync"
 	"time"
 
@@ -45,6 +46,8 @@ type Orchestrator struct {
 	emulatorAVDName  string
 
 	frontendMetrics map[string][]models.FrontendMetrics
+	frontendRunners map[string]*exec.Cmd
+	runnerStops     map[string]bool
 
 	androidReady      bool
 	androidReadyError string
@@ -84,6 +87,8 @@ func NewOrchestrator(
 		emulatorDeviceID: "emulator-5554",
 		emulatorAVDName:  "Pixel_8a",
 		frontendMetrics:  make(map[string][]models.FrontendMetrics),
+		frontendRunners:  make(map[string]*exec.Cmd),
+		runnerStops:      make(map[string]bool),
 		androidReady:     true,
 	}
 
