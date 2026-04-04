@@ -85,7 +85,11 @@ func UploadAPKHandler() http.HandlerFunc {
 		}
 		_ = dst.Close()
 
-		pkg, activity, err := extractAPKMetadata(dstPath)
+		// Create Android executor client for metadata extraction
+		executorURL := GetDefaultExecutorURL()
+		client := NewAndroidExecutorClient(executorURL)
+
+		pkg, activity, err := extractAPKMetadata(dstPath, client)
 		if err != nil {
 			_ = os.Remove(dstPath)
 			http.Error(w, "failed to extract apk metadata: "+err.Error(), http.StatusBadRequest)
@@ -146,7 +150,18 @@ func getUploadedAPK(id string) (uploadedAPK, bool) {
 	return apk, ok
 }
 
-func extractAPKMetadata(apkPath string) (string, string, error) {
+func extractAPKMetadata(apkPath string, client *AndroidExecutorClient) (string, string, error) {
+	// First, try to use the remote executor
+	if client != nil && client.IsAvailable() {
+		pkg, activity, err := client.CallAAPT(apkPath)
+		if err == nil {
+			return pkg, activity, nil
+		}
+		// Log the error but continue to fallback
+		fmt.Printf("remote executor failed, falling back to local aapt: %v\n", err)
+	}
+
+	// Fallback to local aapt
 	out, err := runAAPT(apkPath)
 	if err != nil {
 		return "", "", err

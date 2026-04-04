@@ -1,0 +1,13 @@
+﻿{
+    "name":  "Test Android Experiment",
+    "apk":  "3ff05e8e-9516-4a60-b931-72948985b510",
+    "duration":  30,
+    "platform":  "android",
+    "target":  "emulator",
+    "faults":  [
+                   {
+                       "trigger":  "request",
+                       "type":  "network_disable"
+                   }
+               ]
+}
