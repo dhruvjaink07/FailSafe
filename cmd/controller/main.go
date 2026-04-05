@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/dhruvjaink07/failsafe/internal/docker"
 	"github.com/dhruvjaink07/failsafe/internal/handlers"
 	"github.com/dhruvjaink07/failsafe/internal/orchestrator"
 	"github.com/dhruvjaink07/failsafe/internal/storage"
@@ -20,6 +21,8 @@ func main() {
 	if err := validateEnv(); err != nil {
 		log.Fatal(err)
 	}
+
+	dockerManager := docker.NewManager()
 
 	connStr := os.Getenv("DB_URL")
 
@@ -51,6 +54,8 @@ func main() {
 	}
 	_ = keyCreateRoles
 	http.HandleFunc("/internal/api-keys/create", handlers.CreateAPIKeyHandler(db, os.Getenv("API_KEY_BOOTSTRAP_TOKEN")))
+	http.HandleFunc("/environment/containers", wrap("list_containers", metricsRoles, handlers.DockerContainersListHandler(dockerManager)))
+	http.HandleFunc("/environment/containers/start", wrap("start_container", startRoles, handlers.DockerContainerStartHandler(dockerManager)))
 
 	// Platform-scoped routes for lifecycle/status/metrics.
 	http.HandleFunc("/experiments/backend/start", wrap("start_experiment", startRoles, handlers.ExperimentBackendStartHandler(orch)))

@@ -23,10 +23,32 @@ docker run -d --name failsafe-postgres -e POSTGRES_USER=failsafe -e POSTGRES_PAS
 docker exec -it failsafe-postgres psql -U failsafe -d failsafe
 ```
 
+### Docker Setup and Management
+
+Use the Docker helper script to manage containers:
+
+```powershell
+# Check Docker status and list containers
+./scripts/docker-helper.ps1
+
+# Ensure Docker is running (auto-starts if needed)
+./scripts/docker-helper.ps1 -Start
+
+# Interactive container management (logs, restart, stop)
+./scripts/docker-helper.ps1 -Interactive
+```
+
 ### to build the docker image
 ```
 docker-compose up --build
 ```
+
+### Testing & Documentation
+
+For comprehensive backend testing workflows, see:
+- [docs/BACKEND_TESTING_GUIDE.md](docs/BACKEND_TESTING_GUIDE.md) - Complete testing guide
+- [docs/ANDROID_EXECUTOR_QUICKSTART.md](docs/ANDROID_EXECUTOR_QUICKSTART.md) - Quick start guide
+- [docs/ANDROID_EXECUTOR_ARCHITECTURE.md](docs/ANDROID_EXECUTOR_ARCHITECTURE.md) - Architecture details
 
 ### Android 
 Required commands (must exist)

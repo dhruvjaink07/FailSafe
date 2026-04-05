@@ -246,9 +246,28 @@ docker-compose logs -f
 4. **Run Smoke Tests** - Verify metrics collection and restart resilience
 5. **Production Deployment** - See [DEPLOYMENT.md](./DEPLOYMENT.md)
 
+## Docker Utilities
+
+Manage containers easily with the Docker helper script:
+
+```powershell
+# Check Docker status and list containers
+./scripts/docker-helper.ps1
+
+# Ensure Docker is running (starts if needed)
+./scripts/docker-helper.ps1 -Start
+
+# Interactive container management
+./scripts/docker-helper.ps1 -Interactive
+```
+
+See [BACKEND_TESTING_GUIDE.md](./BACKEND_TESTING_GUIDE.md) for comprehensive testing workflows and container management.
+
 ## Architecture Reference
 
 For detailed architecture information, see:
-- [ANDROID_EXECUTOR_ARCHITECTURE.md](./ANDROID_EXECUTOR_ARCHITECTURE.md)
-- [API_DOCS.md](../API_DOCS.md)
-- [INTEGRATION_TESTING_STATUS.md](../INTEGRATION_TESTING_STATUS.md)
+- [BACKEND_TESTING_GUIDE.md](./BACKEND_TESTING_GUIDE.md) - Complete testing workflows
+- [ANDROID_EXECUTOR_ARCHITECTURE.md](./ANDROID_EXECUTOR_ARCHITECTURE.md) - System design
+- [ANDROID_EXECUTOR_TEST_PLAN.md](./ANDROID_EXECUTOR_TEST_PLAN.md) - Test procedures
+- [API_DOCS.md](../API_DOCS.md) - API reference
+- [INTEGRATION_TESTING_STATUS.md](../INTEGRATION_TESTING_STATUS.md) - Integration status

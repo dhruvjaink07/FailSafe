@@ -26,6 +26,16 @@ type ContainerStats struct {
 	BlockIO       string
 }
 
+type ContainerInfo struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Image   string `json:"image"`
+	State   string `json:"state"`
+	Status  string `json:"status"`
+	Ports   string `json:"ports"`
+	Running bool   `json:"running"`
+}
+
 func NewManager() *Manager {
 	return &Manager{}
 }
@@ -256,4 +266,42 @@ func (m *Manager) GetContainerStats(name string) (*ContainerStats, error) {
 		NetworkIO:     stats.NetIO,
 		BlockIO:       stats.BlockIO,
 	}, nil
+}
+
+// ListContainers returns all containers visible to docker ps -a.
+func (m *Manager) ListContainers() ([]ContainerInfo, error) {
+	out, err := m.run("ps", "-a", "--format", "{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.State}}\t{{.Status}}\t{{.Ports}}")
+	if err != nil {
+		return nil, err
+	}
+
+	if strings.TrimSpace(out) == "" {
+		return []ContainerInfo{}, nil
+	}
+
+	lines := strings.Split(out, "\n")
+	containers := make([]ContainerInfo, 0, len(lines))
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+
+		parts := strings.SplitN(line, "\t", 6)
+		if len(parts) < 6 {
+			continue
+		}
+
+		state := strings.TrimSpace(parts[3])
+		containers = append(containers, ContainerInfo{
+			ID:      strings.TrimSpace(parts[0]),
+			Name:    strings.TrimSpace(parts[1]),
+			Image:   strings.TrimSpace(parts[2]),
+			State:   state,
+			Status:  strings.TrimSpace(parts[4]),
+			Ports:   strings.TrimSpace(parts[5]),
+			Running: strings.EqualFold(state, "running"),
+		})
+	}
+
+	return containers, nil
 }

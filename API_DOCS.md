@@ -15,25 +15,28 @@ http://localhost:8000
 
 ## Route Map
 
-| Method | Path | Request Body | Notes |
-| --- | --- | --- | --- |
-| GET | `/health` | none | Liveness check. |
-| POST | `/upload/apk` | multipart form data (`file` or `apk`) | Upload APK and resolve package/activity metadata. |
-| POST | `/experiments/backend/start` | JSON `StartRequest` | Backend/Docker run; requires `target_type=docker`. |
-| GET | `/experiments/backend/status?id={id}` | query `id` | Returns backend lifecycle payload. |
-| POST | `/experiments/backend/stop?id={id}` | query `id` | Stops backend run. |
-| GET | `/experiments/backend/metrics?id={id}` | query `id` | Returns backend metrics summary. |
-| POST | `/experiments/android/start` | JSON `StartRequest` | Android run; requires `target_type=android`. |
-| GET | `/experiments/android/status?id={id}` | query `id` | Returns Android live status payload. |
-| POST | `/experiments/android/stop?id={id}` | query `id` | Stops Android run. |
-| GET | `/experiments/android/metrics?id={id}` | query `id` | Returns Android metrics summary. |
-| POST | `/experiments/frontend/start` | JSON `StartRequest` | Frontend run; requires `target_type=frontend` and `frontend_run.base_url`. |
-| GET | `/experiments/frontend/status?id={id}` | query `id` | Returns frontend lifecycle payload. |
-| POST | `/experiments/frontend/stop?id={id}` | query `id` | Stops frontend run. |
-| GET | `/experiments/frontend/metrics?id={id}` | query `id` | Returns frontend metrics and score payload. |
-| POST | `/frontend/metrics` | JSON `FrontendMetricsBatch` | Browser collector ingestion endpoint. |
-| POST | `/internal/api-keys/create` | JSON `CreateAPIKeyRequest` | Key provisioning endpoint (currently open, no API key header required). |
-| GET | `/scenarios/presets` | none | Lists scenario presets. |
+| Method | Path | Auth | Request Body | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/health` | Public | none | Liveness check. |
+| GET | `/scenarios/presets` | Public | none | Lists scenario presets and supported fault/trigger types. |
+| POST | `/upload/apk` | Public | multipart form data (`file` or `apk`) | Upload APK and resolve package/activity metadata. |
+| POST | `/frontend/metrics` | Public | JSON `FrontendMetricsBatch` | Browser collector ingestion endpoint. |
+| POST | `/internal/api-keys/create` | Public | JSON `CreateAPIKeyRequest` | Key provisioning endpoint. |
+| GET | `/environment/containers` | API key (`viewer+`) | none | Lists all containers in the docker environment (`docker ps -a`). |
+| POST | `/environment/containers/start` | API key (`engineer+`) | query `name` or JSON `{"name":"..."}` | Starts/wakes selected container if present. |
+| POST | `/experiments/backend/start` | API key (`engineer+`) | JSON `StartRequest` | Backend/Docker run; requires `target_type=docker`. |
+| GET | `/experiments/backend/status?id={id}` | Public | query `id` | Returns backend lifecycle payload. |
+| POST | `/experiments/backend/stop?id={id}` | API key (`engineer+`) | query `id` | Stops backend run. |
+| GET | `/experiments/backend/metrics?id={id}` | API key (`viewer+`) | query `id` | Returns backend metrics summary. |
+| POST | `/experiments/android/start` | API key (`engineer+`) | JSON `StartRequest` | Android run; requires `target_type=android`. |
+| GET | `/experiments/android/status?id={id}` | Public | query `id` | Returns Android live status payload. |
+| POST | `/experiments/android/stop?id={id}` | API key (`engineer+`) | query `id` | Stops Android run. |
+| GET | `/experiments/android/metrics?id={id}` | API key (`viewer+`) | query `id` | Returns Android metrics summary. |
+| POST | `/experiments/frontend/start` | API key (`engineer+`) | JSON `StartRequest` | Frontend run; requires `target_type=frontend` and `frontend_run.base_url`. |
+| GET | `/experiments/frontend/status?id={id}` | Public | query `id` | Returns frontend lifecycle payload. |
+| POST | `/experiments/frontend/stop?id={id}` | API key (`engineer+`) | query `id` | Stops frontend run. |
+| GET | `/experiments/frontend/metrics?id={id}` | API key (`viewer+`) | query `id` | Returns frontend metrics and score payload. |
+| GET | `/experiments/frontend/fault-command?id={id}` | Public | query `id` | Returns current active frontend fault command (if any). |
 
 ## Shared Experiment Start Body
 
@@ -66,10 +69,22 @@ Common optional fields:
 
 Protected routes require `x-api-key`:
 
+- `/environment/containers`
+- `/environment/containers/start`
 - `/experiments/backend/start`, `/experiments/backend/stop`
 - `/experiments/android/start`, `/experiments/android/stop`
 - `/experiments/frontend/start`, `/experiments/frontend/stop`
 - all `/experiments/*/metrics` routes
+
+Public routes (no API key required):
+
+- `/health`
+- `/scenarios/presets`
+- `/upload/apk`
+- `/frontend/metrics`
+- `/internal/api-keys/create`
+- all `/experiments/*/status` routes
+- `/experiments/frontend/fault-command`
 
 Valid roles:
 
@@ -81,6 +96,70 @@ Valid environments:
 
 - `dev`
 - `prod`
+
+## Environment Container APIs
+
+### List containers
+
+`GET /environment/containers`
+
+Headers:
+
+- `x-api-key: <viewer|engineer|admin key>`
+
+Response shape:
+
+```json
+{
+  "timestamp": "2026-04-05T12:34:56Z",
+  "count": 2,
+  "containers": [
+    {
+      "id": "5f7c...",
+      "name": "failsafe-postgres",
+      "image": "postgres:15",
+      "state": "running",
+      "status": "Up 4 minutes",
+      "ports": "0.0.0.0:5432->5432/tcp",
+      "running": true
+    }
+  ]
+}
+```
+
+### Start/wake a container
+
+`POST /environment/containers/start`
+
+Headers:
+
+- `x-api-key: <engineer|admin key>`
+
+Supported request forms:
+
+1) query parameter
+
+```text
+POST /environment/containers/start?name=failsafe-postgres
+```
+
+2) JSON body
+
+```json
+{
+  "name": "failsafe-postgres"
+}
+```
+
+Response shape:
+
+```json
+{
+  "name": "failsafe-postgres",
+  "status": "started_or_already_running",
+  "started_at": "2026-04-05T12:35:22Z"
+}
+```
 
 ## Platform-Specific Start Requirements
 
