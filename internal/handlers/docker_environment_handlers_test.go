@@ -15,6 +15,8 @@ type fakeDockerEnvironmentService struct {
 	containers []docker.ContainerInfo
 	startErr   error
 	started    []string
+	engineRes  docker.EngineStartResult
+	engineErr  error
 }
 
 func (f *fakeDockerEnvironmentService) ListContainers() ([]docker.ContainerInfo, error) {
@@ -27,6 +29,13 @@ func (f *fakeDockerEnvironmentService) StartContainer(name string) error {
 	}
 	f.started = append(f.started, name)
 	return nil
+}
+
+func (f *fakeDockerEnvironmentService) EnsureDockerEngine() (docker.EngineStartResult, error) {
+	if f.engineErr != nil {
+		return f.engineRes, f.engineErr
+	}
+	return f.engineRes, nil
 }
 
 func TestDockerContainersListHandler(t *testing.T) {
@@ -120,5 +129,42 @@ func TestDockerContainerStartHandlerServiceError(t *testing.T) {
 
 	if res.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", res.Code, res.Body.String())
+	}
+}
+
+func TestDockerEngineStartHandlerSuccess(t *testing.T) {
+	fake := &fakeDockerEnvironmentService{
+		engineRes: docker.EngineStartResult{
+			OS:             "windows",
+			AlreadyRunning: true,
+			DesktopStarted: false,
+			EngineReady:    true,
+			Message:        "docker engine already running",
+		},
+	}
+
+	h := DockerEngineStartHandler(fake)
+	req := httptest.NewRequest(http.MethodPost, "/environment/docker/engine/start", nil)
+	res := httptest.NewRecorder()
+	h(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+}
+
+func TestDockerEngineStartHandlerFailure(t *testing.T) {
+	fake := &fakeDockerEnvironmentService{
+		engineRes: docker.EngineStartResult{OS: "linux", EngineReady: false},
+		engineErr: errors.New("unsupported os"),
+	}
+
+	h := DockerEngineStartHandler(fake)
+	req := httptest.NewRequest(http.MethodPost, "/environment/docker/engine/start", nil)
+	res := httptest.NewRecorder()
+	h(res, req)
+
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d: %s", res.Code, res.Body.String())
 	}
 }

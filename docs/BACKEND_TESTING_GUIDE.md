@@ -35,7 +35,18 @@ Invoke-WebRequest -Uri "http://localhost:8000/environment/containers" `
   -UseBasicParsing | Select-Object -ExpandProperty Content
 ```
 
-### 4. Wake a Selected Container via API
+### 4. Start Docker Engine via API (Windows/macOS)
+
+```powershell
+$apiKey = "<YOUR_API_KEY>"
+
+Invoke-WebRequest -Uri "http://localhost:8000/environment/docker/engine/start" `
+  -Method Post `
+  -Headers @{ "X-API-Key" = $apiKey } `
+  -UseBasicParsing
+```
+
+### 5. Wake a Selected Container via API
 
 ```powershell
 $apiKey = "<YOUR_API_KEY>"
@@ -49,6 +60,68 @@ Invoke-WebRequest -Uri "http://localhost:8000/environment/containers/start?name=
 ---
 
 ## Environment Setup
+
+### Database Configuration (Plug-and-Play)
+
+The backend now supports two DB configuration modes:
+
+1. `DB_URL` (direct connection string)
+2. `DB_HOST` + `DB_PORT` + `DB_USER` + `DB_PASSWORD` + `DB_NAME` (auto-built DSN)
+
+If `DB_URL` is set, it is used directly.
+If `DB_URL` is empty, DSN is built from `DB_*` variables.
+
+SSL mode behavior:
+
+- Local/docker hosts (`localhost`, `127.0.0.1`, `::1`, `postgres`) default to `sslmode=disable`
+- Remote hosts (for example Render Postgres) default to `sslmode=require`
+- Override with `DB_SSLMODE` if needed
+
+#### Option A: Local backend + shared Render Postgres
+
+```powershell
+$env:DB_URL = "postgres://<user>:<password>@<external-render-host>:5432/failsafe?sslmode=require"
+```
+
+#### Option B: Render backend + Render Postgres
+
+Set this in Render service environment variables:
+
+```text
+DB_URL=postgres://<user>:<password>@<internal-render-host>:5432/failsafe?sslmode=require
+```
+
+#### Option C: Local backend + local/docker Postgres
+
+```powershell
+$env:DB_HOST = "localhost"      # or "postgres" in docker-compose network
+$env:DB_PORT = "5432"
+$env:DB_USER = "failsafe"
+$env:DB_PASSWORD = "failsafe"
+$env:DB_NAME = "failsafe"
+# optional override
+$env:DB_SSLMODE = "disable"
+```
+
+#### Required startup placeholders
+
+These are auto-defaulted to `local` when missing, but you can still set explicitly:
+
+```powershell
+$env:CONFIG_PARAM_1 = "local"
+$env:CONFIG_PARAM_2 = "local"
+$env:CONFIG_PARAM_3 = "local"
+$env:CONFIG_PARAM_4 = "local"
+$env:CONFIG_PARAM_5 = "local"
+```
+
+#### One-time schema initialization for new shared DB
+
+```powershell
+psql "<render-external-database-url>" -f internal/storage/schema.sql
+```
+
+---
 
 ### Start Services
 

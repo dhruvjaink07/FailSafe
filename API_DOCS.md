@@ -24,6 +24,7 @@ http://localhost:8000
 | POST | `/internal/api-keys/create` | Public | JSON `CreateAPIKeyRequest` | Key provisioning endpoint. |
 | GET | `/environment/containers` | API key (`viewer+`) | none | Lists all containers in the docker environment (`docker ps -a`). |
 | POST | `/environment/containers/start` | API key (`engineer+`) | query `name` or JSON `{"name":"..."}` | Starts/wakes selected container if present. |
+| POST | `/environment/docker/engine/start` | API key (`engineer+`) | none | Starts Docker Engine host process (Windows/macOS/Linux) and waits for engine readiness. |
 | POST | `/experiments/backend/start` | API key (`engineer+`) | JSON `StartRequest` | Backend/Docker run; requires `target_type=docker`. |
 | GET | `/experiments/backend/status?id={id}` | Public | query `id` | Returns backend lifecycle payload. |
 | POST | `/experiments/backend/stop?id={id}` | API key (`engineer+`) | query `id` | Stops backend run. |
@@ -71,6 +72,7 @@ Protected routes require `x-api-key`:
 
 - `/environment/containers`
 - `/environment/containers/start`
+- `/environment/docker/engine/start`
 - `/experiments/backend/start`, `/experiments/backend/stop`
 - `/experiments/android/start`, `/experiments/android/stop`
 - `/experiments/frontend/start`, `/experiments/frontend/stop`
@@ -148,6 +150,48 @@ POST /environment/containers/start?name=failsafe-postgres
 ```json
 {
   "name": "failsafe-postgres"
+}
+```
+
+### Start Docker engine host (Windows/macOS/Linux)
+
+`POST /environment/docker/engine/start`
+
+Headers:
+
+- `x-api-key: <engineer|admin key>`
+
+Behavior:
+
+- If Docker engine is already reachable, returns success immediately.
+- On Windows/macOS, attempts to launch Docker Desktop and waits up to 90 seconds for engine readiness.
+- On Linux, attempts `systemctl start docker`, then `service docker start`, then waits up to 90 seconds.
+- If privileges are insufficient or runtime is unsupported, returns `503` with details.
+
+Success response shape:
+
+```json
+{
+  "os": "windows",
+  "already_running": false,
+  "desktop_started": true,
+  "engine_ready": true,
+  "message": "docker desktop started and engine is reachable"
+}
+```
+
+Failure response shape (`503`):
+
+```json
+{
+  "error": "docker desktop launched but engine not ready within 90 seconds",
+  "result": {
+    "os": "windows",
+    "already_running": false,
+    "desktop_started": true,
+    "engine_ready": false,
+    "message": "docker desktop launched but engine not ready within 90 seconds"
+  }
 }
 ```
 

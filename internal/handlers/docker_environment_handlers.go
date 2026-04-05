@@ -13,6 +13,7 @@ import (
 type DockerEnvironmentService interface {
 	ListContainers() ([]docker.ContainerInfo, error)
 	StartContainer(name string) error
+	EnsureDockerEngine() (docker.EngineStartResult, error)
 }
 
 type dockerStartRequest struct {
@@ -79,5 +80,28 @@ func DockerContainerStartHandler(service DockerEnvironmentService) http.HandlerF
 			"status":     "started_or_already_running",
 			"started_at": time.Now().UTC().Format(time.RFC3339),
 		})
+	}
+}
+
+func DockerEngineStartHandler(service DockerEnvironmentService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		result, err := service.EnsureDockerEngine()
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"error":  err.Error(),
+				"result": result,
+			})
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(result)
 	}
 }

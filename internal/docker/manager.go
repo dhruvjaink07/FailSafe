@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Manager struct{}
@@ -34,6 +37,14 @@ type ContainerInfo struct {
 	Status  string `json:"status"`
 	Ports   string `json:"ports"`
 	Running bool   `json:"running"`
+}
+
+type EngineStartResult struct {
+	OS             string `json:"os"`
+	AlreadyRunning bool   `json:"already_running"`
+	DesktopStarted bool   `json:"desktop_started"`
+	EngineReady    bool   `json:"engine_ready"`
+	Message        string `json:"message"`
 }
 
 func NewManager() *Manager {
@@ -304,4 +315,76 @@ func (m *Manager) ListContainers() ([]ContainerInfo, error) {
 	}
 
 	return containers, nil
+}
+
+func (m *Manager) dockerAvailable() bool {
+	_, err := m.run("version", "--format", "{{.Server.Version}}")
+	return err == nil
+}
+
+// EnsureDockerEngine tries to start Docker Desktop on Windows/macOS and waits until engine is reachable.
+func (m *Manager) EnsureDockerEngine() (EngineStartResult, error) {
+	res := EngineStartResult{OS: runtime.GOOS}
+
+	if m.dockerAvailable() {
+		res.AlreadyRunning = true
+		res.EngineReady = true
+		res.Message = "docker engine already running"
+		return res, nil
+	}
+
+	if err := m.startEngineHost(); err != nil {
+		res.Message = err.Error()
+		return res, err
+	}
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+		res.DesktopStarted = true
+	}
+
+	timeout := time.Now().Add(90 * time.Second)
+	for time.Now().Before(timeout) {
+		if m.dockerAvailable() {
+			res.EngineReady = true
+			res.Message = "docker desktop started and engine is reachable"
+			return res, nil
+		}
+		time.Sleep(2 * time.Second)
+	}
+
+	res.Message = "docker start attempted but engine not ready within 90 seconds"
+	return res, errors.New(res.Message)
+}
+
+func (m *Manager) startEngineHost() error {
+	switch runtime.GOOS {
+	case "windows":
+		candidates := []string{
+			`C:\Program Files\Docker\Docker\Docker Desktop.exe`,
+			`C:\Program Files\Docker\Docker\com.docker.desktop.exe`,
+		}
+
+		for _, exe := range candidates {
+			if err := exec.Command(exe).Start(); err == nil {
+				return nil
+			}
+		}
+		return errors.New("docker desktop executable not found on Windows")
+	case "darwin":
+		if err := exec.Command("open", "-a", "Docker").Start(); err != nil {
+			return fmt.Errorf("failed to launch Docker on macOS: %w", err)
+		}
+		return nil
+	case "linux":
+		// Try systemd first (most common Linux setup).
+		if err := exec.Command("systemctl", "start", "docker").Run(); err == nil {
+			return nil
+		}
+		// Fallback for non-systemd distros.
+		if err := exec.Command("service", "docker", "start").Run(); err == nil {
+			return nil
+		}
+		return errors.New("failed to start Docker engine on Linux (tried: systemctl start docker, service docker start). Ensure Docker is installed and the process has sufficient privileges")
+	default:
+		return fmt.Errorf("unsupported OS for docker engine start: %s", runtime.GOOS)
+	}
 }

@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
@@ -18,13 +20,18 @@ func main() {
 		log.Printf("warning: failed to load .env: %v", err)
 	}
 
+	ensureDefaultConfigParams()
+
+	connStr, err := resolveDBConnString()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	if err := validateEnv(); err != nil {
 		log.Fatal(err)
 	}
 
 	dockerManager := docker.NewManager()
-
-	connStr := os.Getenv("DB_URL")
 
 	db, err := storage.NewPostgres(connStr)
 	if err != nil {
@@ -56,6 +63,7 @@ func main() {
 	http.HandleFunc("/internal/api-keys/create", handlers.CreateAPIKeyHandler(db, os.Getenv("API_KEY_BOOTSTRAP_TOKEN")))
 	http.HandleFunc("/environment/containers", wrap("list_containers", metricsRoles, handlers.DockerContainersListHandler(dockerManager)))
 	http.HandleFunc("/environment/containers/start", wrap("start_container", startRoles, handlers.DockerContainerStartHandler(dockerManager)))
+	http.HandleFunc("/environment/docker/engine/start", wrap("start_docker_engine", startRoles, handlers.DockerEngineStartHandler(dockerManager)))
 
 	// Platform-scoped routes for lifecycle/status/metrics.
 	http.HandleFunc("/experiments/backend/start", wrap("start_experiment", startRoles, handlers.ExperimentBackendStartHandler(orch)))
@@ -114,7 +122,6 @@ func loadDotEnv(path string) error {
 
 func validateEnv() error {
 	required := []string{
-		"DB_URL",
 		"CONFIG_PARAM_1",
 		"CONFIG_PARAM_2",
 		"CONFIG_PARAM_3",
@@ -134,4 +141,83 @@ func validateEnv() error {
 	}
 
 	return nil
+}
+
+func ensureDefaultConfigParams() {
+	keys := []string{
+		"CONFIG_PARAM_1",
+		"CONFIG_PARAM_2",
+		"CONFIG_PARAM_3",
+		"CONFIG_PARAM_4",
+		"CONFIG_PARAM_5",
+	}
+
+	for _, key := range keys {
+		if strings.TrimSpace(os.Getenv(key)) == "" {
+			_ = os.Setenv(key, "local")
+		}
+	}
+}
+
+func resolveDBConnString() (string, error) {
+	if direct := strings.TrimSpace(os.Getenv("DB_URL")); direct != "" {
+		return direct, nil
+	}
+
+	host := strings.TrimSpace(os.Getenv("DB_HOST"))
+	port := strings.TrimSpace(os.Getenv("DB_PORT"))
+	user := strings.TrimSpace(os.Getenv("DB_USER"))
+	password := strings.TrimSpace(os.Getenv("DB_PASSWORD"))
+	dbName := strings.TrimSpace(os.Getenv("DB_NAME"))
+
+	missing := make([]string, 0)
+	if host == "" {
+		missing = append(missing, "DB_HOST")
+	}
+	if user == "" {
+		missing = append(missing, "DB_USER")
+	}
+	if password == "" {
+		missing = append(missing, "DB_PASSWORD")
+	}
+	if dbName == "" {
+		missing = append(missing, "DB_NAME")
+	}
+
+	if len(missing) > 0 {
+		return "", fmt.Errorf("database config missing: set DB_URL or DB_HOST/DB_USER/DB_PASSWORD/DB_NAME (missing: %s)", strings.Join(missing, ", "))
+	}
+
+	if port == "" {
+		port = "5432"
+	}
+
+	sslMode := strings.TrimSpace(os.Getenv("DB_SSLMODE"))
+	if sslMode == "" {
+		sslMode = defaultSSLModeForHost(host)
+	}
+
+	dsn := url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(user, password),
+		Host:   net.JoinHostPort(host, port),
+		Path:   dbName,
+	}
+
+	q := dsn.Query()
+	q.Set("sslmode", sslMode)
+	dsn.RawQuery = q.Encode()
+
+	built := dsn.String()
+	_ = os.Setenv("DB_URL", built)
+	return built, nil
+}
+
+func defaultSSLModeForHost(host string) string {
+	switch strings.ToLower(strings.TrimSpace(host)) {
+	case "localhost", "127.0.0.1", "::1", "postgres":
+		return "disable"
+	default:
+		return "require"
+	}
 }
