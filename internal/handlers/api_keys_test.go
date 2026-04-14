@@ -23,7 +23,7 @@ type fakeAPIKeyStore struct {
 	}
 }
 
-func (f *fakeAPIKeyStore) CreateAPIKey(environment, role, name string) (string, error) {
+func (f *fakeAPIKeyStore) CreateAPIKey(environment, role, name, ownerID string) (string, error) {
 	f.created.environment = environment
 	f.created.role = role
 	f.created.name = name
@@ -36,6 +36,19 @@ func (f *fakeAPIKeyStore) LookupAPIKeyByHash(hashHex string) (*models.APIKey, er
 	}
 	return nil, fmt.Errorf("not found")
 }
+
+func (f *fakeAPIKeyStore) ListAPIKeys(environment string) ([]models.APIKey, error) {
+	res := make([]models.APIKey, 0, len(f.keys))
+	for _, v := range f.keys {
+		if environment == "" || v.Environment == environment {
+			res = append(res, *v)
+		}
+	}
+	return res, nil
+}
+
+func (f *fakeAPIKeyStore) RevokeAPIKey(id string) error           { return nil }
+func (f *fakeAPIKeyStore) RotateAPIKey(id string) (string, error) { return "rotated-fake-key", nil }
 
 func TestRequireAPIKeyEnforcesAccess(t *testing.T) {
 	viewerRaw := "fs_viewer"

@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"strings"
 	"time"
 
@@ -22,7 +23,19 @@ func NewPostgres(connStr string) (*Postgres, error) {
 		return nil, err
 	}
 
-	return &Postgres{Pool: pool}, nil
+	p := &Postgres{Pool: pool}
+
+	// Attempt to apply local schema file if present. This is safe to run repeatedly
+	// because `schema.sql` uses CREATE TABLE IF NOT EXISTS and ALTER TABLE IF NOT EXISTS.
+	if schemaBytes, err := os.ReadFile("internal/storage/schema.sql"); err == nil {
+		schema := string(schemaBytes)
+		// execute schema SQL; ignore individual statement errors but return on fatal Exec error
+		if _, execErr := p.Pool.Exec(context.Background(), schema); execErr != nil {
+			return nil, execErr
+		}
+	}
+
+	return p, nil
 }
 
 func (p *Postgres) InsertExperiment(exp *models.Experiment) error {

@@ -60,7 +60,13 @@ func main() {
 		return handlers.RequireAPIKey(db, roles, action, next)
 	}
 	_ = keyCreateRoles
-	http.HandleFunc("/internal/api-keys/create", handlers.CreateAPIKeyHandler(db, os.Getenv("API_KEY_BOOTSTRAP_TOKEN")))
+	// API key creation supports optional JWT auth for user-owned keys
+	http.HandleFunc("/internal/api-keys/create", handlers.JWTMiddleware(handlers.CreateAPIKeyHandler(db, os.Getenv("API_KEY_BOOTSTRAP_TOKEN"))))
+	http.HandleFunc("/internal/auth/signup", handlers.SignupHandler(db))
+	http.HandleFunc("/internal/auth/signin", handlers.SigninHandler(db))
+	http.HandleFunc("/internal/api-keys", wrap("list_api_keys", metricsRoles, handlers.ListAPIKeysHandler(db)))
+	http.HandleFunc("/internal/api-keys/revoke", wrap("revoke_api_key", []string{"admin"}, handlers.RevokeAPIKeyHandler(db)))
+	http.HandleFunc("/internal/api-keys/rotate", wrap("rotate_api_key", []string{"admin"}, handlers.RotateAPIKeyHandler(db)))
 	http.HandleFunc("/environment/containers", wrap("list_containers", metricsRoles, handlers.DockerContainersListHandler(dockerManager)))
 	http.HandleFunc("/environment/containers/start", wrap("start_container", startRoles, handlers.DockerContainerStartHandler(dockerManager)))
 	http.HandleFunc("/environment/docker/engine/start", wrap("start_docker_engine", startRoles, handlers.DockerEngineStartHandler(dockerManager)))

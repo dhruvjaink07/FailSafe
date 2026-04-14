@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/dhruvjaink07/failsafe/internal/models"
 	"github.com/google/uuid"
 )
@@ -39,16 +41,26 @@ func normalizePart(value string) string {
 	return strings.Trim(value, "-_")
 }
 
-func (p *Postgres) CreateAPIKey(environment, role, name string) (string, error) {
+func (p *Postgres) CreateAPIKey(environment, role, name, ownerID string) (string, error) {
 	raw, hashHex := GenerateAPIKey(environment, role, name)
 	keyID := uuid.New()
 
-	_, err := p.Pool.Exec(context.Background(), `
-		INSERT INTO api_keys (id, key_hash, environment, role)
-		VALUES ($1, $2, $3, $4)
-	`, keyID, hashHex, strings.TrimSpace(environment), strings.TrimSpace(role))
-	if err != nil {
-		return "", err
+	if strings.TrimSpace(ownerID) == "" {
+		_, err := p.Pool.Exec(context.Background(), `
+			INSERT INTO api_keys (id, key_hash, environment, role)
+			VALUES ($1, $2, $3, $4)
+		`, keyID, hashHex, strings.TrimSpace(environment), strings.TrimSpace(role))
+		if err != nil {
+			return "", err
+		}
+	} else {
+		_, err := p.Pool.Exec(context.Background(), `
+			INSERT INTO api_keys (id, key_hash, environment, role, owner_id)
+			VALUES ($1, $2, $3, $4, $5)
+		`, keyID, hashHex, strings.TrimSpace(environment), strings.TrimSpace(role), ownerID)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	return raw, nil
@@ -83,9 +95,63 @@ func (p *Postgres) CountAPIKeys() (int, error) {
 	return count, nil
 }
 
+func (p *Postgres) ListAPIKeys(environment string) ([]models.APIKey, error) {
+	var rows pgx.Rows
+	var err error
+	if strings.TrimSpace(environment) == "" {
+		rows, err = p.Pool.Query(context.Background(), `
+			SELECT id, key_hash, environment, role, created_at FROM api_keys ORDER BY created_at DESC
+		`)
+	} else {
+		rows, err = p.Pool.Query(context.Background(), `
+			SELECT id, key_hash, environment, role, created_at FROM api_keys WHERE environment = $1 ORDER BY created_at DESC
+		`, strings.TrimSpace(environment))
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make([]models.APIKey, 0)
+	for rows.Next() {
+		var k models.APIKey
+		if err := rows.Scan(&k.ID, &k.KeyHash, &k.Environment, &k.Role, &k.CreatedAt); err != nil {
+			return nil, err
+		}
+		result = append(result, k)
+	}
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+	return result, nil
+}
+
 func (p *Postgres) PingAPIKeyStore() error {
 	if p == nil || p.Pool == nil {
 		return fmt.Errorf("postgres not initialized")
 	}
 	return nil
+}
+
+// RevokeAPIKey deletes an API key by id
+func (p *Postgres) RevokeAPIKey(id string) error {
+	_, err := p.Pool.Exec(context.Background(), `DELETE FROM api_keys WHERE id = $1`, id)
+	return err
+}
+
+// RotateAPIKey generates a new raw key and replaces the stored hash for the given id
+func (p *Postgres) RotateAPIKey(id string) (string, error) {
+	// We need to generate a new raw key; use empty environment/role/name placeholders since GenerateAPIKey needs them.
+	// First fetch existing env and role to preserve naming parts
+	var env, role, name string
+	err := p.Pool.QueryRow(context.Background(), `SELECT environment, role, '' FROM api_keys WHERE id = $1`, id).Scan(&env, &role, &name)
+	if err != nil {
+		return "", err
+	}
+	raw, hashHex := GenerateAPIKey(env, role, name)
+	_, err = p.Pool.Exec(context.Background(), `UPDATE api_keys SET key_hash = $1 WHERE id = $2`, hashHex, id)
+	if err != nil {
+		return "", err
+	}
+	return raw, nil
 }

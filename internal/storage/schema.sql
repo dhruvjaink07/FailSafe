@@ -25,6 +25,18 @@ CREATE TABLE IF NOT EXISTS api_keys (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
+ALTER TABLE IF EXISTS api_keys
+    ADD COLUMN IF NOT EXISTS owner_id UUID;
+
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY,
+    email TEXT UNIQUE NOT NULL,
+    name TEXT,
+    password_hash TEXT,
+    role TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS metrics_raw (
     id BIGSERIAL PRIMARY KEY,
     experiment_id UUID,

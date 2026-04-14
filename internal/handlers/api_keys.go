@@ -14,8 +14,11 @@ import (
 )
 
 type APIKeyStore interface {
-	CreateAPIKey(environment, role, name string) (string, error)
+	CreateAPIKey(environment, role, name, ownerID string) (string, error)
 	LookupAPIKeyByHash(hashHex string) (*models.APIKey, error)
+	ListAPIKeys(environment string) ([]models.APIKey, error)
+	RevokeAPIKey(id string) error
+	RotateAPIKey(id string) (string, error)
 }
 
 const apiContextKey = "api_ctx"
@@ -90,7 +93,9 @@ func CreateAPIKeyHandler(store APIKeyStore, bootstrapToken string) http.HandlerF
 			return
 		}
 
-		raw, err := store.CreateAPIKey(env, role, req.Name)
+		apiCtx, _ := APIContextFromRequest(r)
+		ownerID := apiCtx.UserID
+		raw, err := store.CreateAPIKey(env, role, req.Name, ownerID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -99,6 +104,80 @@ func CreateAPIKeyHandler(store APIKeyStore, bootstrapToken string) http.HandlerF
 		log.Printf("api_key_id=public endpoint=%s timestamp=%s action=create_api_key env=%s role=%s", r.URL.Path, time.Now().UTC().Format(time.RFC3339), env, role)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"api_key": raw})
+	}
+}
+
+func ListAPIKeysHandler(store APIKeyStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		env := strings.TrimSpace(r.URL.Query().Get("env"))
+
+		keys, err := store.ListAPIKeys(env)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"items": keys,
+			"count": len(keys),
+		})
+	}
+}
+
+type revokeRequest struct {
+	ID string `json:"id"`
+}
+
+func RevokeAPIKeyHandler(store APIKeyStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req revokeRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid json", http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(req.ID) == "" {
+			http.Error(w, "id required", http.StatusBadRequest)
+			return
+		}
+		if err := store.RevokeAPIKey(req.ID); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+type rotateRequest struct {
+	ID string `json:"id"`
+}
+
+func RotateAPIKeyHandler(store APIKeyStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req rotateRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid json", http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(req.ID) == "" {
+			http.Error(w, "id required", http.StatusBadRequest)
+			return
+		}
+		newKey, err := store.RotateAPIKey(req.ID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"api_key": newKey})
 	}
 }
 

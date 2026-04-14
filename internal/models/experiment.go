@@ -89,9 +89,10 @@ type FrontendRunConfig struct {
 }
 
 type APIContext struct {
-	KeyID string `json:"key_id"`
-	Env   string `json:"env"`
-	Role  string `json:"role"`
+	KeyID  string `json:"key_id"`
+	Env    string `json:"env"`
+	Role   string `json:"role"`
+	UserID string `json:"user_id,omitempty"`
 }
 
 type FaultTrigger struct {
