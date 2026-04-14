@@ -2,7 +2,20 @@
 
 ## Authentication
 
-Current API is unauthenticated for local/dev usage. Add auth middleware before public exposure.
+Current API supports two authentication methods used by the frontend and admin tooling:
+
+- API keys: short-lived or long-lived raw keys presented in the `x-api-key` header for every protected call.
+- JWT user auth: sign-up / sign-in to obtain a Bearer JWT used for user-scoped operations such as creating owned API keys.
+
+Environment variables:
+
+- `JWT_SECRET` — secret used to sign JWTs (defaults to `dev-secret` in development when unset).
+
+Authentication headers:
+
+- API key: `x-api-key: <raw-key>`
+- JWT: `Authorization: Bearer <token>`
+
 
 ## Content Type
 
@@ -598,3 +611,184 @@ Preset names, fault types, and trigger types.
 
 - `400 Bad Request`: invalid payload, missing id, invalid APK id, preset load failure.
 - `405 Method Not Allowed`: wrong method for endpoint.
+
+## Additional Endpoints (Auth, API keys, Logs, History)
+
+### Auth - Sign Up
+
+Request
+
+```http
+POST /internal/auth/signup
+Content-Type: application/json
+```
+
+Body
+
+```json
+{ "email": "alice@example.com", "name": "Alice", "password": "s3cret" }
+```
+
+Response
+
+```json
+{ "user_id": "<uuid>" }
+```
+
+Notes: creates a user with role `engineer` by default in the current implementation.
+
+### Auth - Sign In
+
+Request
+
+```http
+POST /internal/auth/signin
+Content-Type: application/json
+```
+
+Body
+
+```json
+{ "email": "alice@example.com", "password": "s3cret" }
+```
+
+Response
+
+```json
+{ "token": "<jwt-bearer-token>" }
+```
+
+Use this token as `Authorization: Bearer <token>` for user-scoped operations.
+
+### API Keys - Create
+
+Request
+
+```http
+POST /internal/api-keys/create
+Content-Type: application/json
+# Optional: Authorization: Bearer <token> to create an owner-scoped key
+```
+
+Body
+
+```json
+{ "environment": "dev|prod", "role": "viewer|engineer|admin", "name": "team-a" }
+```
+
+Response
+
+```json
+{ "api_key": "fs_dev_engineer_..." }
+```
+
+Notes: if `Authorization` is present and valid, the created key will be associated with that user.
+
+### API Keys - List
+
+Request
+
+```http
+GET /internal/api-keys?env=dev
+Header: x-api-key: <admin-or-authorized-key>
+```
+
+Response
+
+```json
+{ "items": [ { "id": "<uuid>", "key_hash": "<sha256>", "environment": "dev", "role": "engineer", "created_at": "..." } ], "count": 1 }
+```
+
+### API Keys - Revoke
+
+Request
+
+```http
+POST /internal/api-keys/revoke
+Content-Type: application/json
+Header: x-api-key: <admin-key>
+```
+
+Body
+
+```json
+{ "id": "<api-key-id>" }
+```
+
+Response
+
+```http
+204 No Content
+```
+
+Notes: only an API key with `admin` role will be authorized to revoke keys (enforced by server).
+
+### API Keys - Rotate
+
+Request
+
+```http
+POST /internal/api-keys/rotate
+Content-Type: application/json
+Header: x-api-key: <admin-key>
+```
+
+Body
+
+```json
+{ "id": "<api-key-id>" }
+```
+
+Response
+
+```json
+{ "api_key": "<new-raw-key>" }
+```
+
+Notes: rotation replaces the stored hash with the new key's hash and returns the raw key.
+
+### Backend Logs (Live)
+
+Request
+
+```http
+GET /experiments/backend/logs?id={experiment_id}&tail=200
+Header: x-api-key: <key>
+```
+
+Response
+
+Content-Type: text/plain
+
+Plain text stream of recent container logs (newest last). Example lines:
+
+```
+[2026-04-14T07:50:12Z] svc-a: starting service
+[2026-04-14T07:50:15Z] svc-a: health check passed
+[2026-04-14T07:50:30Z] svc-a: injecting latency (100ms)
+```
+
+Notes: the endpoint validates that the provided API key has ownership/permission for the requested experiment, then fetches logs from the corresponding container using `docker logs`.
+
+### History Detail (Per-experiment)
+
+Request
+
+```http
+GET /experiments/history/detail?id={experiment_id}
+Header: x-api-key: <key>
+```
+
+Response
+
+```json
+{
+  "id": "<experiment_id>",
+  "timeline": [...],
+  "aggregated_metrics": { ... },
+  "snapshots": [ ... ]
+}
+```
+
+Notes: this route returns the detailed per-experiment metrics payload (larger than the lightweight `/experiments/history` response).
+
