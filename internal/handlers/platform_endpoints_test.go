@@ -187,6 +187,14 @@ func (f *fakeExperimentService) GetFrontendFaultCommand(id string) (map[string]i
 	return map[string]interface{}{"active": false}, nil
 }
 
+func (f *fakeExperimentService) GetExperimentHistory(apiKeyID string, limit int, offset int) ([]map[string]interface{}, error) {
+	return []map[string]interface{}{}, nil
+}
+
+func (f *fakeExperimentService) GetExperimentHistoryDetail(apiKeyID string, experimentID string) (map[string]interface{}, error) {
+	return map[string]interface{}{}, nil
+}
+
 func (f *fakeExperimentService) AddFrontendMetrics(data []models.FrontendMetrics) {}
 
 func newTestMux(orch ExperimentService) *http.ServeMux {
