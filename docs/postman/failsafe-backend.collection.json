@@ -1,0 +1,103 @@
+{
+  "info": {
+    "name": "FailSafe Backend API - Quick Collection",
+    "_postman_id": "b6f3a9f0-8a6d-4f3c-9f2b-1a2b3c4d5e6f",
+    "description": "Minimal Postman collection for the backend auth, api-key, logs, and history endpoints.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000" },
+    { "key": "token", "value": "" },
+    { "key": "adminKey", "value": "" },
+    { "key": "key", "value": "" },
+    { "key": "expId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Auth - Sign Up",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"email\": \"alice@example.com\", \"name\": \"Alice\", \"password\": \"s3cret\" }"
+        },
+        "url": { "raw": "{{baseUrl}}/internal/auth/signup", "host": [ "{{baseUrl}}" ], "path": [ "internal", "auth", "signup" ] }
+      }
+    },
+    {
+      "name": "Auth - Sign In",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": { "mode": "raw", "raw": "{ \"email\": \"alice@example.com\", \"password\": \"s3cret\" }" },
+        "url": { "raw": "{{baseUrl}}/internal/auth/signin", "host": [ "{{baseUrl}}" ], "path": [ "internal", "auth", "signin" ] }
+      }
+    },
+    {
+      "name": "API Keys - Create (no JWT)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": { "mode": "raw", "raw": "{ \"environment\": \"dev\", \"role\": \"engineer\", \"name\": \"team-a\" }" },
+        "url": { "raw": "{{baseUrl}}/internal/api-keys/create", "host": [ "{{baseUrl}}" ], "path": [ "internal", "api-keys", "create" ] }
+      }
+    },
+    {
+      "name": "API Keys - Create (with JWT)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{ \"environment\": \"dev\", \"role\": \"engineer\", \"name\": \"team-a\" }" },
+        "url": { "raw": "{{baseUrl}}/internal/api-keys/create", "host": [ "{{baseUrl}}" ], "path": [ "internal", "api-keys", "create" ] }
+      }
+    },
+    {
+      "name": "API Keys - List",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "x-api-key", "value": "{{adminKey}}" } ],
+        "url": { "raw": "{{baseUrl}}/internal/api-keys?env=dev", "host": [ "{{baseUrl}}" ], "path": [ "internal", "api-keys" ], "query": [ { "key": "env", "value": "dev" } ] }
+      }
+    },
+    {
+      "name": "API Keys - Revoke",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "x-api-key", "value": "{{adminKey}}" } ],
+        "body": { "mode": "raw", "raw": "{ \"id\": \"<api-key-id>\" }" },
+        "url": { "raw": "{{baseUrl}}/internal/api-keys/revoke", "host": [ "{{baseUrl}}" ], "path": [ "internal", "api-keys", "revoke" ] }
+      }
+    },
+    {
+      "name": "API Keys - Rotate",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "x-api-key", "value": "{{adminKey}}" } ],
+        "body": { "mode": "raw", "raw": "{ \"id\": \"<api-key-id>\" }" },
+        "url": { "raw": "{{baseUrl}}/internal/api-keys/rotate", "host": [ "{{baseUrl}}" ], "path": [ "internal", "api-keys", "rotate" ] }
+      }
+    },
+    {
+      "name": "Experiments - Backend Logs",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "x-api-key", "value": "{{key}}" } ],
+        "url": { "raw": "{{baseUrl}}/experiments/backend/logs?id={{expId}}&tail=200", "host": [ "{{baseUrl}}" ], "path": [ "experiments", "backend", "logs" ], "query": [ { "key": "id", "value": "{{expId}}" }, { "key": "tail", "value": "200" } ] }
+      }
+    },
+    {
+      "name": "Experiments - History Detail",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "x-api-key", "value": "{{key}}" } ],
+        "url": { "raw": "{{baseUrl}}/experiments/history/detail?id={{expId}}", "host": [ "{{baseUrl}}" ], "path": [ "experiments", "history", "detail" ], "query": [ { "key": "id", "value": "{{expId}}" } ] }
+      }
+    }
+  ]
+}
