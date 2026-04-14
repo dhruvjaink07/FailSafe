@@ -792,3 +792,79 @@ Response
 
 Notes: this route returns the detailed per-experiment metrics payload (larger than the lightweight `/experiments/history` response).
 
+## Curl Examples
+
+Replace `http://localhost:8000` with your server URL and set variables (`$TOKEN`, `$ADMIN_KEY`, `$KEY`, `$EXP_ID`) as needed.
+
+- Sign up (create user):
+
+```bash
+curl -s -X POST http://localhost:8000/internal/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{"email":"alice@example.com","name":"Alice","password":"s3cret"}'
+```
+
+- Sign in (get JWT):
+
+```bash
+curl -s -X POST http://localhost:8000/internal/auth/signin \
+  -H "Content-Type: application/json" \
+  -d '{"email":"alice@example.com","password":"s3cret"}'
+```
+
+- Create API key (no JWT):
+
+```bash
+curl -s -X POST http://localhost:8000/internal/api-keys/create \
+  -H "Content-Type: application/json" \
+  -d '{"environment":"dev","role":"engineer","name":"team-a"}'
+```
+
+- Create API key (as signed-in user):
+
+```bash
+curl -s -X POST http://localhost:8000/internal/api-keys/create \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"environment":"dev","role":"engineer","name":"team-a"}'
+```
+
+- List API keys (admin key required):
+
+```bash
+curl -s -X GET "http://localhost:8000/internal/api-keys?env=dev" \
+  -H "x-api-key: $ADMIN_KEY"
+```
+
+- Revoke API key (admin):
+
+```bash
+curl -s -X POST http://localhost:8000/internal/api-keys/revoke \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: $ADMIN_KEY" \
+  -d '{"id":"<api-key-id>"}' -i
+```
+
+- Rotate API key (admin):
+
+```bash
+curl -s -X POST http://localhost:8000/internal/api-keys/rotate \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: $ADMIN_KEY" \
+  -d '{"id":"<api-key-id>"}'
+```
+
+- Fetch backend logs (plain text):
+
+```bash
+curl -s -X GET "http://localhost:8000/experiments/backend/logs?id=$EXP_ID&tail=200" \
+  -H "x-api-key: $KEY"
+```
+
+- Fetch history detail (JSON):
+
+```bash
+curl -s -X GET "http://localhost:8000/experiments/history/detail?id=$EXP_ID" \
+  -H "x-api-key: $KEY"
+```
+
