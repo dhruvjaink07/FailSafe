@@ -2,10 +2,12 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -195,6 +197,15 @@ func (f *fakeExperimentService) GetExperimentHistoryDetail(apiKeyID string, expe
 	return map[string]interface{}{}, nil
 }
 
+func (f *fakeExperimentService) GetBackendLogs(apiKeyID string, experimentID string, tail int) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.experiments[experimentID]; !ok {
+		return "", fmt.Errorf("experiment not found")
+	}
+	return "[fake-log] container started\n[fake-log] injected fault\n[fake-log] recovered\n", nil
+}
+
 func (f *fakeExperimentService) AddFrontendMetrics(data []models.FrontendMetrics) {}
 
 func newTestMux(orch ExperimentService) *http.ServeMux {
@@ -207,6 +218,7 @@ func newTestMux(orch ExperimentService) *http.ServeMux {
 	mux.HandleFunc("/experiments/backend/status", ExperimentBackendStatusHandler(orch))
 	mux.HandleFunc("/experiments/backend/stop", ExperimentBackendStopHandler(orch))
 	mux.HandleFunc("/experiments/backend/metrics", ExperimentBackendMetricsHandler(orch))
+	mux.HandleFunc("/experiments/backend/logs", ExperimentBackendLogsHandler(orch))
 
 	mux.HandleFunc("/experiments/android/start", ExperimentAndroidStartHandler(orch))
 	mux.HandleFunc("/experiments/android/status", ExperimentAndroidStatusHandler(orch))
@@ -284,6 +296,19 @@ func TestBackendLifecycleWithFakeService(t *testing.T) {
 	if stopRes.Code != http.StatusOK {
 		t.Fatalf("expected backend stop 200, got %d: %s", stopRes.Code, stopRes.Body.String())
 	}
+
+	// Smoke-test logs endpoint for started experiment
+	logsRes := httptest.NewRecorder()
+	logsReq := httptest.NewRequest(http.MethodGet, "/experiments/backend/logs?id="+started.ID, nil)
+	// Attach a fake API context so handler authorizes the request in tests
+	logsReq = logsReq.WithContext(context.WithValue(logsReq.Context(), apiContextKey, models.APIContext{KeyID: "public"}))
+	mux.ServeHTTP(logsRes, logsReq)
+	if logsRes.Code != http.StatusOK {
+		t.Fatalf("expected backend logs 200, got %d: %s", logsRes.Code, logsRes.Body.String())
+	}
+	if !strings.Contains(logsRes.Body.String(), "[fake-log]") {
+		t.Fatalf("expected fake log content, got: %s", logsRes.Body.String())
+	}
 }
 
 func TestAndroidLifecycleWithFakeService(t *testing.T) {
@@ -343,6 +368,7 @@ func TestPlatformEndpointsValidation(t *testing.T) {
 		{name: "backend status missing id", method: http.MethodGet, path: "/experiments/backend/status", code: http.StatusBadRequest},
 		{name: "backend stop missing id", method: http.MethodPost, path: "/experiments/backend/stop", code: http.StatusBadRequest},
 		{name: "backend metrics missing id", method: http.MethodGet, path: "/experiments/backend/metrics", code: http.StatusBadRequest},
+		{name: "backend logs missing id", method: http.MethodGet, path: "/experiments/backend/logs", code: http.StatusBadRequest},
 		{name: "android start invalid json", method: http.MethodPost, path: "/experiments/android/start", body: "{", code: http.StatusBadRequest},
 		{name: "android status missing id", method: http.MethodGet, path: "/experiments/android/status", code: http.StatusBadRequest},
 		{name: "android stop missing id", method: http.MethodPost, path: "/experiments/android/stop", code: http.StatusBadRequest},

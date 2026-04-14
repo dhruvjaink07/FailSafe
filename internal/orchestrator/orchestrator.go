@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"errors"
 	"os/exec"
 	"sync"
 	"time"
@@ -95,4 +96,34 @@ func NewOrchestrator(
 	orch.initAndroidPreflight()
 
 	return orch
+}
+
+func (o *Orchestrator) GetBackendLogs(apiKeyID, experimentID string, tail int) (string, error) {
+	if o.db == nil {
+		return "", errors.New("storage not configured")
+	}
+
+	owned, err := o.db.IsExperimentOwnedByAPIKey(experimentID, apiKeyID)
+	if err != nil {
+		return "", err
+	}
+	if !owned {
+		return "", errors.New("experiment not found or access denied")
+	}
+
+	exp, err := o.db.GetExperimentSnapshot(experimentID, "")
+	if err != nil {
+		return "", err
+	}
+	if exp == nil {
+		return "", errors.New("experiment not found")
+	}
+
+	if len(exp.Targets) == 0 {
+		return "", errors.New("no target containers for experiment")
+	}
+
+	// Use first target (container/service name)
+	container := exp.Targets[0]
+	return o.docker.GetContainerLogs(container, tail)
 }

@@ -140,6 +140,20 @@ func (p *Postgres) GetExperimentSnapshot(id string, targetType string) (*models.
 	}
 }
 
+func (p *Postgres) IsExperimentOwnedByAPIKey(experimentID, apiKeyID string) (bool, error) {
+	if strings.TrimSpace(experimentID) == "" || strings.TrimSpace(apiKeyID) == "" {
+		return false, nil
+	}
+	var exists bool
+	err := p.Pool.QueryRow(context.Background(), `
+		SELECT EXISTS(SELECT 1 FROM experiments WHERE id = $1::uuid AND api_key_id = $2::uuid)
+	`, experimentID, apiKeyID).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
 func (p *Postgres) getBackendExperimentSnapshot(id string) (*models.Experiment, error) {
 	var faultType, state, phase string
 	var targetsRaw []byte

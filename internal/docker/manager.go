@@ -279,6 +279,23 @@ func (m *Manager) GetContainerStats(name string) (*ContainerStats, error) {
 	}, nil
 }
 
+// GetContainerLogs returns the logs for the given container name. If tail > 0,
+// it will include only the last `tail` lines.
+func (m *Manager) GetContainerLogs(name string, tail int) (string, error) {
+	args := []string{"logs"}
+	if tail > 0 {
+		args = append(args, "--tail", fmt.Sprint(tail))
+	}
+	args = append(args, name)
+
+	out, err := m.run(args...)
+	if err != nil {
+		return "", err
+	}
+
+	return out, nil
+}
+
 // ListContainers returns all containers visible to docker ps -a.
 func (m *Manager) ListContainers() ([]ContainerInfo, error) {
 	out, err := m.run("ps", "-a", "--format", "{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.State}}\t{{.Status}}\t{{.Ports}}")

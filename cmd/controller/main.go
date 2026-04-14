@@ -70,6 +70,7 @@ func main() {
 	http.HandleFunc("/experiments/backend/status", handlers.ExperimentBackendStatusHandler(orch))
 	http.HandleFunc("/experiments/backend/stop", wrap("stop_experiment", startRoles, handlers.ExperimentBackendStopHandler(orch)))
 	http.HandleFunc("/experiments/backend/metrics", wrap("read_metrics", metricsRoles, handlers.ExperimentBackendMetricsHandler(orch)))
+	http.HandleFunc("/experiments/backend/logs", wrap("read_logs", metricsRoles, handlers.ExperimentBackendLogsHandler(orch)))
 
 	http.HandleFunc("/experiments/android/start", wrap("start_experiment", startRoles, handlers.ExperimentAndroidStartHandler(orch)))
 	http.HandleFunc("/experiments/android/status", handlers.ExperimentAndroidStatusHandler(orch))

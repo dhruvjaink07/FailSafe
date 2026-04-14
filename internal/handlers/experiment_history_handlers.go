@@ -43,6 +43,38 @@ func ExperimentHistoryHandler(orch ExperimentService) http.HandlerFunc {
 	}
 }
 
+func ExperimentBackendLogsHandler(orch ExperimentService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		experimentID, err := requireExperimentID(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		apiCtx, ok := APIContextFromRequest(r)
+		if !ok || apiCtx.KeyID == "" {
+			http.Error(w, "missing api context", http.StatusUnauthorized)
+			return
+		}
+
+		tail := parseBoundedInt(r.URL.Query().Get("tail"), 0, 0, 10000)
+
+		logs, err := orch.GetBackendLogs(apiCtx.KeyID, experimentID, tail)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write([]byte(logs))
+	}
+}
+
 func ExperimentHistoryDetailHandler(orch ExperimentService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
