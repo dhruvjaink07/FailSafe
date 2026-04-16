@@ -1,0 +1,4 @@
+FROM postgres:15
+
+# Copy compressed dump so the official image will run it on initialization
+COPY failsafe_dump.sql.gz /docker-entrypoint-initdb.d/failsafe_dump.sql.gz

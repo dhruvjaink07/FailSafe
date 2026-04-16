@@ -12,7 +12,9 @@ import (
 	"github.com/dhruvjaink07/failsafe/internal/docker"
 	"github.com/dhruvjaink07/failsafe/internal/handlers"
 	"github.com/dhruvjaink07/failsafe/internal/orchestrator"
+	"github.com/dhruvjaink07/failsafe/internal/preview"
 	"github.com/dhruvjaink07/failsafe/internal/storage"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -82,6 +84,26 @@ func main() {
 	http.HandleFunc("/experiments/android/status", handlers.ExperimentAndroidStatusHandler(orch))
 	http.HandleFunc("/experiments/android/stop", wrap("stop_experiment", startRoles, handlers.ExperimentAndroidStopHandler(orch)))
 	http.HandleFunc("/experiments/android/metrics", wrap("read_metrics", metricsRoles, handlers.ExperimentAndroidMetricsHandler(orch)))
+	http.HandleFunc("/experiments/android/preview/mjpeg", wrap("preview_mjpeg", metricsRoles, preview.MJPEGPreviewHandler()))
+	http.HandleFunc("/experiments/android/preview/start", wrap("preview_start", metricsRoles, func(w http.ResponseWriter, r *http.Request) {
+		preview.StartPreviewHandler()(w, r)
+	}))
+	http.HandleFunc("/experiments/android/preview/stop", wrap("preview_stop", metricsRoles, func(w http.ResponseWriter, r *http.Request) {
+		preview.StopPreviewHandler()(w, r)
+	}))
+
+	http.HandleFunc("/experiments/android/preview/metrics", wrap("preview_metrics", metricsRoles, preview.SessionMetricsHandler()))
+	http.HandleFunc("/experiments/android/preview/sessions", wrap("preview_sessions", metricsRoles, preview.ListSessionsHandler()))
+
+	// Serve the preview HTML client from docs/preview at /preview-client/
+	fs := http.FileServer(http.Dir("docs/preview"))
+	http.Handle("/preview-client/", http.StripPrefix("/preview-client/", fs))
+	http.HandleFunc("/preview-client", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/preview-client/", http.StatusFound)
+	})
+
+	// Prometheus metrics endpoint
+	http.Handle("/metrics", promhttp.Handler())
 
 	http.HandleFunc("/experiments/frontend/start", wrap("start_experiment", startRoles, handlers.ExperimentFrontendStartHandler(orch)))
 	http.HandleFunc("/experiments/frontend/status", handlers.ExperimentFrontendStatusHandler(orch))

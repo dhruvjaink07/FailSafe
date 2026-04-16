@@ -1,0 +1,17 @@
+{
+  "file": "D:\\FailSafe\\backend_metrics_raw.csv",
+  "rows": 2064,
+  "overall": {
+    "latency_ms": {
+      "count": 2064,
+      "mean": 111.50968992248062,
+      "median": 0.0,
+      "p95": 500.0,
+      "p99": 501.0,
+      "std": 208.1836107988231,
+      "min": 0.0,
+      "max": 507.0
+    },
+    "error_rate": 0.003391472868217054
+  }
+}

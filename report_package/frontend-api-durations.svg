@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="240">
+  <rect width="100%" height="100%" fill="#fff"/>
+  <text x="20" y="20" font-family="Arial" font-size="14" fill="#222">Frontend API call durations (ms) — experiment 7ae28a67</text>
+  <!-- Bars -->
+  <!-- Data: [712,712,716.9,717,1019.3,1019.3,1019.3,1019.3] -->
+  <!-- scale: 150 / 1020 ≈ 0.1470588 -->
+  <g transform="translate(50,200)">
+    <line x1="0" y1="0" x2="620" y2="0" stroke="#ccc" />
+    <!-- bars drawn upwards with negative y -->
+    <rect x="0"   y="-105" width="60" height="105" fill="#4A90E2" />
+    <rect x="80"  y="-105" width="60" height="105" fill="#4A90E2" />
+    <rect x="160" y="-105" width="60" height="105" fill="#4A90E2" />
+    <rect x="240" y="-105" width="60" height="105" fill="#4A90E2" />
+    <rect x="320" y="-149" width="60" height="149" fill="#D0021B" />
+    <rect x="400" y="-149" width="60" height="149" fill="#D0021B" />
+    <rect x="480" y="-149" width="60" height="149" fill="#D0021B" />
+    <rect x="560" y="-149" width="60" height="149" fill="#D0021B" />
+
+    <!-- x labels -->
+    <text x="30"  y="18" font-size="12" fill="#000">1</text>
+    <text x="110" y="18" font-size="12" fill="#000">2</text>
+    <text x="190" y="18" font-size="12" fill="#000">3</text>
+    <text x="270" y="18" font-size="12" fill="#000">4</text>
+    <text x="350" y="18" font-size="12" fill="#000">5</text>
+    <text x="430" y="18" font-size="12" fill="#000">6</text>
+    <text x="510" y="18" font-size="12" fill="#000">7</text>
+    <text x="590" y="18" font-size="12" fill="#000">8</text>
+
+    <!-- y axis ticks -->
+    <g fill="#666" font-size="11">
+      <text x="-40" y="0">0</text>
+      <text x="-50" y="-50">500</text>
+      <text x="-50" y="-100">1000</text>
+    </g>
+
+    <!-- mean and median lines -->
+    <!-- mean ~866.9 => y = -127.4 -->
+    <line x1="0" x2="620" y1="-127.4" y2="-127.4" stroke="#27AE60" stroke-dasharray="4 4" />
+    <text x="630" y="-123" font-size="11" fill="#27AE60">mean ≈ 867 ms</text>
+    <!-- median ~868.15 => y = -127.7 -->
+    <line x1="0" x2="620" y1="-127.7" y2="-127.7" stroke="#F5A623" stroke-dasharray="2 3" />
+    <text x="630" y="-120" font-size="11" fill="#F5A623">median ≈ 868 ms</text>
+  </g>
+</svg>

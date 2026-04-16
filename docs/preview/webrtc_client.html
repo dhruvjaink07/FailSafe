@@ -1,0 +1,93 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>FailSafe WebRTC Preview Client</title>
+  <style>body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;margin:20px}label{display:block;margin-top:8px}</style>
+</head>
+<body>
+  <h2>FailSafe WebRTC Preview Client</h2>
+  <label>API Key: <input id="apiKey" style="width:420px" placeholder="x-api-key header value"></label>
+  <label>Device (adb serial, optional): <input id="device" placeholder="optional adb device serial"></label>
+  <button id="start">Start Preview</button>
+  <button id="stop" disabled>Stop Preview</button>
+  <p>Session ID: <span id="session"></span></p>
+  <video id="video" autoplay playsinline controls style="width:640px;height:360px;background:#000"></video>
+  <pre id="log" style="height:160px;overflow:auto;background:#111;color:#eee;padding:8px"></pre>
+
+<script>
+const startBtn = document.getElementById('start');
+const stopBtn = document.getElementById('stop');
+const apiInput = document.getElementById('apiKey');
+const deviceInput = document.getElementById('device');
+const sessionSpan = document.getElementById('session');
+const video = document.getElementById('video');
+const logEl = document.getElementById('log');
+let pc=null; let sessionId=null; let pollTimer=null;
+function log(...args){ logEl.textContent += args.join(' ')+'\n'; logEl.scrollTop = logEl.scrollHeight; }
+startBtn.onclick = async () => {
+  const apiKey = apiInput.value.trim();
+  const device = deviceInput.value.trim();
+  if(!apiKey){ alert('API key required (x-api-key header)'); return; }
+  startBtn.disabled = true;
+  log('Creating RTCPeerConnection...');
+  pc = new RTCPeerConnection({iceServers:[]});
+  pc.ontrack = (ev)=>{ log('ontrack', ev); video.srcObject = ev.streams[0]; }
+  pc.onicecandidate = (ev)=>{ log('icecandidate', ev.candidate); }
+  // ensure we receive video
+  pc.addTransceiver('video', {direction:'recvonly'});
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  log('Local SDP created');
+
+  // POST offer to server
+  const body = { sdp: offer.sdp };
+  if(device) body.device = device;
+  log('Sending offer to server...');
+  const res = await fetch('/experiments/android/preview/start', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey
+    },
+    body: JSON.stringify(body)
+  });
+  if(!res.ok){ const txt=await res.text(); log('Server error:',res.status, txt); startBtn.disabled=false; return; }
+  const js = await res.json();
+  sessionId = js.session_id || js.sessionId || js.sessionID || null;
+  sessionSpan.textContent = sessionId || '(no session id returned)';
+  const answer = { type: 'answer', sdp: js.sdp };
+  await pc.setRemoteDescription(answer);
+  log('Remote SDP set (answer)');
+  stopBtn.disabled = false;
+
+  // start polling session metrics if we have session id
+  if(sessionId){
+    pollTimer = setInterval(async ()=>{
+      try{
+        const r = await fetch('/experiments/android/preview/metrics?session_id='+encodeURIComponent(sessionId), { headers: { 'x-api-key': apiKey }});
+        if(r.ok){ const m = await r.json(); log('metrics:', JSON.stringify(m)); }
+        else { log('metrics fetch failed', r.status); }
+      }catch(e){ log('metrics fetch error', e); }
+    }, 3000);
+  }
+};
+
+stopBtn.onclick = async ()=>{
+  stopBtn.disabled=true;
+  if(!pc){ startBtn.disabled=false; return; }
+  // attempt to stop session on server if we know id
+  try{
+    const apiKey = apiInput.value.trim();
+    if(sessionId){ await fetch('/experiments/android/preview/stop?session_id='+encodeURIComponent(sessionId), { method:'POST', headers:{ 'x-api-key': apiKey }}); }
+  }catch(e){ log('stop request failed', e); }
+  if(pollTimer) clearInterval(pollTimer);
+  pc.getSenders().forEach(s=>s.track && s.track.stop());
+  pc.close();
+  pc=null; sessionId=null; sessionSpan.textContent='';
+  startBtn.disabled=false; log('stopped');
+};
+</script>
+</body>
+</html>
