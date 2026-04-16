@@ -26,7 +26,7 @@ Android executor listening on :9090
 **Terminal 2:**
 ```bash
 # From FailSafe root
-docker-compose up
+docker compose -f deployments/docker/docker-compose.yml up
 ```
 
 Expected output:
@@ -60,7 +60,7 @@ To override:
 ```bash
 # Before running docker-compose
 export ANDROID_EXECUTOR_URL=http://your-host:9090
-docker-compose up
+docker compose -f deployments/docker/docker-compose.yml up
 ```
 
 ### 2. APK Upload Directory
@@ -175,7 +175,7 @@ docker run -it golang:latest curl http://host.docker.internal:9090/health
 
 # If that fails, use machine IP instead:
 $env:ANDROID_EXECUTOR_URL = "http://192.168.1.100:9090"
-docker-compose up
+docker compose -f deployments/docker/docker-compose.yml up
 ```
 
 ### Database connection issues
@@ -185,8 +185,8 @@ docker-compose up
 docker ps | grep postgres
 
 # Reset database
-docker-compose down -v  # removes volumes
-docker-compose up
+docker compose -f deployments/docker/docker-compose.yml down -v  # removes volumes
+docker compose -f deployments/docker/docker-compose.yml up
 ```
 
 ## Common Commands
@@ -226,13 +226,13 @@ Remove-Item -Path "uploads/*" -Recurse -Force -ErrorAction SilentlyContinue
 
 ```bash
 # Backend container logs
-docker-compose logs -f failsafe-backend
+docker compose -f deployments/docker/docker-compose.yml logs -f failsafe-backend
 
 # Database logs
-docker-compose logs -f failsafe-postgres
+docker compose -f deployments/docker/docker-compose.yml logs -f failsafe-postgres
 
 # Both
-docker-compose logs -f
+docker compose -f deployments/docker/docker-compose.yml logs -f
 
 # Executor logs (in its terminal)
 # Just look at Terminal 1

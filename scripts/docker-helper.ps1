@@ -27,6 +27,13 @@ param(
     [switch]$Interactive
 )
 
+# Prefer compose in deployments/docker if present
+$composeCandidates = @(
+    "deployments/docker/docker-compose.yml",
+    "docker-compose.yml"
+)
+$composeFile = $composeCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+
 function Ensure-Docker-Running {
     <#
     .SYNOPSIS
@@ -146,8 +153,8 @@ function Show-Interactive-Menu {
         Write-Host "`nOptions:" -ForegroundColor Cyan
         Write-Host "  1. Show logs (backend)" -ForegroundColor Gray
         Write-Host "  2. Show logs (postgres)" -ForegroundColor Gray
-        Write-Host "  3. Restart containers (docker-compose up)" -ForegroundColor Gray
-        Write-Host "  4. Stop containers (docker-compose down)" -ForegroundColor Gray
+                Write-Host "  3. Restart containers (docker compose -f <compose-file> up)" -ForegroundColor Gray
+                Write-Host "  4. Stop containers (docker compose -f <compose-file> down)" -ForegroundColor Gray
         Write-Host "  5. Refresh status" -ForegroundColor Gray
         Write-Host "  6. Exit" -ForegroundColor Gray
         
@@ -163,23 +170,23 @@ function Show-Interactive-Menu {
                 docker logs -f failsafe-postgres 2>$null
             }
             "3" {
-                Write-Host "`nRestarting containers..." -ForegroundColor Yellow
-                if (Test-Path "docker-compose.yml") {
-                    docker-compose up -d
-                    Write-Host "✓ Containers restarted" -ForegroundColor Green
+                Write-Host "Restarting containers..." -ForegroundColor Yellow
+                if ($composeFile) {
+                    docker compose -f $composeFile up -d
+                    Write-Host "✓ Containers restarted using $composeFile" -ForegroundColor Green
                     Start-Sleep -Seconds 3
                 } else {
-                    Write-Host "✗ docker-compose.yml not found" -ForegroundColor Red
+                    Write-Host "✗ docker-compose file not found (looked for deployments/docker/docker-compose.yml and docker-compose.yml)" -ForegroundColor Red
                 }
             }
             "4" {
-                Write-Host "`nStopping containers..." -ForegroundColor Yellow
-                if (Test-Path "docker-compose.yml") {
-                    docker-compose down
-                    Write-Host "✓ Containers stopped" -ForegroundColor Green
+                Write-Host "Stopping containers..." -ForegroundColor Yellow
+                if ($composeFile) {
+                    docker compose -f $composeFile down
+                    Write-Host "✓ Containers stopped using $composeFile" -ForegroundColor Green
                     Start-Sleep -Seconds 2
                 } else {
-                    Write-Host "✗ docker-compose.yml not found" -ForegroundColor Red
+                    Write-Host "✗ docker-compose file not found (looked for deployments/docker/docker-compose.yml and docker-compose.yml)" -ForegroundColor Red
                 }
             }
             "5" {

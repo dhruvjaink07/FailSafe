@@ -229,7 +229,7 @@ cmd\android-executor\android-executor.exe
 
 **Terminal 2 - Start Backend (Docker):**
 ```bash
-docker-compose up
+docker compose -f deployments/docker/docker-compose.yml up
 ```
 
 **Terminal 3 - Test:**

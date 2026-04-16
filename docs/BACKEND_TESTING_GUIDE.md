@@ -130,7 +130,7 @@ psql "<render-external-database-url>" -f internal/storage/schema.sql
 cmd\android-executor\android-executor.exe
 
 # Terminal 2: Docker Compose
-docker-compose up
+docker compose -f deployments/docker/docker-compose.yml up
 
 # Terminal 3: Testing
 curl.exe http://localhost:8000/health
@@ -281,7 +281,7 @@ docker exec -it failsafe-postgres psql -U failsafe -d failsafe
 # Exit: \q
 ```
 
-### Inspect Container
+docker compose -f deployments/docker/docker-compose.yml up
 
 ```powershell
 # Environment variables
@@ -291,27 +291,27 @@ docker inspect failsafe-backend --format='{{json .Config.Env}}' | ConvertFrom-Js
 docker inspect failsafe-backend --format='{{json .NetworkSettings.Ports}}'
 
 # Full config
-docker inspect failsafe-backend
+docker compose -f deployments/docker/docker-compose.yml up
 ```
 
 ---
 
 ## Troubleshooting
-
+docker compose -f deployments/docker/docker-compose.yml down
 ### Docker Won't Start
 
-```powershell
+docker compose -f deployments/docker/docker-compose.yml up --build
 # Check if Docker Desktop service is enabled
 Get-Service Docker
-
+docker compose -f deployments/docker/docker-compose.yml stop
 # Try to start Docker Desktop manually
 & "C:\Program Files\Docker\Docker\Docker Desktop.exe"
-
-# Wait 30 seconds and check again
+docker compose -f deployments/docker/docker-compose.yml down -v  # removes volumes
+docker compose -f deployments/docker/docker-compose.yml up
 ./scripts/docker-helper.ps1 -Status
 ```
-
-### Container Fails to Start
+docker compose -f deployments/docker/docker-compose.yml build --no-cache
+docker compose -f deployments/docker/docker-compose.yml up
 
 ```powershell
 # View full error logs
@@ -324,8 +324,8 @@ docker stats failsafe-backend
 docker restart failsafe-backend
 
 # Or rebuild
-docker-compose down
-docker-compose up --build
+docker compose -f deployments/docker/docker-compose.yml down
+docker compose -f deployments/docker/docker-compose.yml up --build
 ```
 
 ### Backend Returns 500 Error
@@ -399,7 +399,7 @@ ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;"
 
 ```powershell
 # Stop containers (keep data)
-docker-compose stop
+docker compose -f deployments/docker/docker-compose.yml stop
 
 # Stop everything
 ./scripts/docker-helper.ps1 -Interactive
@@ -416,11 +416,11 @@ docker container prune
 docker image prune
 
 # Full reset (removes data)
-docker-compose down -v
+docker compose -f deployments/docker/docker-compose.yml down -v
 
 # Rebuild from scratch
-docker-compose build --no-cache
-docker-compose up
+docker compose -f deployments/docker/docker-compose.yml build --no-cache
+docker compose -f deployments/docker/docker-compose.yml up
 ```
 
 ---
@@ -444,7 +444,7 @@ $env:DB_PASSWORD = "failsafe"
 $env:DB_NAME = "failsafe"
 
 # Start services
-docker-compose up
+docker compose -f deployments/docker/docker-compose.yml up
 ```
 
 ---

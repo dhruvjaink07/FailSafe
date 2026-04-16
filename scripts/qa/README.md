@@ -5,7 +5,7 @@ These scripts run platform lifecycle checks using `curl.exe` and verify key outp
 ## Prerequisites
 
 - Controller running on `http://localhost:8000`
-- Mock microservices running (`docker-compose.test.yml`) for backend and frontend checks
+-- Mock microservices running (`deployments/docker/docker-compose.test.yml`) for backend and frontend checks
 - Android prerequisites running for Android checks
 
 ## Run Commands

@@ -151,7 +151,7 @@ export ANDROID_EXECUTOR_URL=http://localhost:9090
 
 ```bash
 # With Docker
-docker-compose up
+docker compose -f deployments/docker/docker-compose.yml up
 
 # Or locally for testing
 go run ./cmd/controller/main.go
@@ -212,7 +212,7 @@ cmd\android-executor\android-executor.exe
 
 2. Start backend in Docker:
 ```bash
-docker-compose up
+docker compose -f deployments/docker/docker-compose.yml up
 ```
 
 3. Upload APK to backend in container:

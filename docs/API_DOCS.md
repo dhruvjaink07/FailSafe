@@ -409,7 +409,7 @@ Response:
 Start mock microservices:
 
 ```powershell
-docker compose -f docker-compose.test.yml up -d --build
+docker compose -f deployments/docker/docker-compose.test.yml up -d --build
 ```
 
 Start controller prerequisites and controller:

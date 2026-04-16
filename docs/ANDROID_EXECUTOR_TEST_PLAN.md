@@ -198,7 +198,7 @@ cmd\android-executor\android-executor.exe
 
 # Terminal 2: Start backend in Docker
 cd d:\FailSafe
-docker-compose up
+docker compose -f deployments/docker/docker-compose.yml up
 # Expected: "failsafe-backend-1 | Server running on :8080"
 
 # Terminal 3: Verify Docker can reach executor
@@ -319,13 +319,13 @@ $ExperimentId = "experiment-uuid-from-test-6"
 curl http://localhost:8080/experiments/$ExperimentId/status | ConvertFrom-Json | ConvertTo-Json -Depth 10
 
 # Terminal 2: Restart backend (Ctrl+C)
-docker-compose down
+docker compose -f deployments/docker/docker-compose.yml down
 
 # Wait 10 seconds
 Start-Sleep -Seconds 10
 
 # Terminal 2: Restart backend
-docker-compose up
+docker compose -f deployments/docker/docker-compose.yml up
 
 # Wait for backend to start (20 seconds)
 Start-Sleep -Seconds 20
@@ -415,7 +415,7 @@ After all tests:
 
 ```powershell
 # Stop containers
-docker-compose down -v
+docker compose -f deployments/docker/docker-compose.yml down -v
 
 # Remove test artifacts
 rm -r uploads/
