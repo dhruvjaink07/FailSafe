@@ -27,7 +27,9 @@ const DEFAULT_SCENARIO = {
 
 class ScenarioLoader {
   constructor(scenarioDir = null) {
-    this.scenarioDir = scenarioDir || path.join(__dirname, '../../configs/scenarios/web');
+    // Default to repository-level configs/scenarios/web when present.
+    const repoConfigs = path.join(__dirname, '../../../configs/scenarios/web');
+    this.scenarioDir = scenarioDir || (fs.existsSync(repoConfigs) ? repoConfigs : path.join(__dirname, '../../configs/scenarios/web'));
     this.scenarios = new Map();
   }
 

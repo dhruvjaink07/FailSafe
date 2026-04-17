@@ -3,6 +3,9 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/dhruvjaink07/failsafe/internal/models"
 )
@@ -31,6 +34,24 @@ func FrontendMetricsHandler(o ExperimentService) http.HandlerFunc {
 			http.Error(w, "invalid payload", http.StatusBadRequest)
 			return
 		}
+
+		// Persist raw payload for debugging/inspection
+		go func(b models.FrontendMetricsBatch) {
+			defer func() { _ = recover() }()
+			outDir := filepath.Join("experiments", "results")
+			_ = os.MkdirAll(outDir, 0o755)
+			var id string
+			if len(b.Metrics) > 0 {
+				id = b.Metrics[0].ExperimentID
+			}
+			if id == "" {
+				id = "unknown"
+			}
+			fname := filepath.Join(outDir, id+"-controller-ingest-"+time.Now().Format("20060102-150405")+".json")
+			if data, err := json.MarshalIndent(b, "", "  "); err == nil {
+				_ = os.WriteFile(fname, data, 0o644)
+			}
+		}(batch)
 
 		o.AddFrontendMetrics(batch.Metrics)
 

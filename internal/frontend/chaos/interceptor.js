@@ -45,19 +45,31 @@ class NetworkInterceptor {
 
       // Check if URL matches target list
       if (!this._matchesTarget(url)) {
-        await route.continue();
+        try {
+          await route.continue();
+        } catch (e) {
+          // ignore if route already handled
+        }
         return;
       }
 
       // Apply offline mode
       if (this.faults.offline) {
-        await route.abort('blockedbyclient');
+        try {
+          await route.abort('blockedbyclient');
+        } catch (e) {
+          // ignore
+        }
         return;
       }
 
       // Apply random failure
       if (Math.random() < this.faults.failureRate) {
-        await route.abort('failed');
+        try {
+          await route.abort('failed');
+        } catch (e) {
+          // ignore
+        }
         return;
       }
 
@@ -66,7 +78,11 @@ class NetworkInterceptor {
         await new Promise((resolve) => setTimeout(resolve, this.faults.networkDelayMs));
       }
 
-      await route.continue();
+      try {
+        await route.continue();
+      } catch (e) {
+        // ignore if route already handled concurrently
+      }
     });
   }
 
