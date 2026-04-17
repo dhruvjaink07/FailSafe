@@ -384,7 +384,25 @@ func (o *Orchestrator) buildBackendMetrics(id string, exp *models.Experiment, en
 
 		// Mark as degraded if error rate is above 0% or latency ratio is high
 		degraded := errorRate > 0 || latencyRatio > 1.5
-		if degraded {
+		// If this experiment intentionally shut down services, and this
+		// endpoint belongs to the targeted endpoints, treat it as expected
+		// service-down and do not include in degradedMap (ignore for
+		// actionable anomaly aggregation).
+		isExpectedDown := false
+		if exp.ExpectedServiceDown && len(exp.TargetEndpointMap) > 0 {
+			for _, eps := range exp.TargetEndpointMap {
+				for _, e := range eps {
+					if e == endpoint {
+						isExpectedDown = true
+						break
+					}
+				}
+				if isExpectedDown {
+					break
+				}
+			}
+		}
+		if degraded && !isExpectedDown {
 			degradedMap[endpoint] = true
 		}
 
@@ -433,7 +451,8 @@ func (o *Orchestrator) buildBackendMetrics(id string, exp *models.Experiment, en
 				"avg_memory_mb":   safeDiv(totalMem, float64(totalRequests)),
 				"max_memory_mb":   maxMem,
 			},
-			"degraded": degraded,
+			"degraded":              degraded,
+			"expected_service_down": isExpectedDown,
 		}
 	}
 

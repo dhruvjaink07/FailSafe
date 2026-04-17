@@ -160,11 +160,12 @@ func (p *Postgres) getBackendExperimentSnapshot(id string) (*models.Experiment, 
 	var observedRaw []byte
 	var createdAt, updatedAt time.Time
 
+	var expectedDown bool
 	err := p.Pool.QueryRow(context.Background(), `
-		SELECT fault_type, state, phase, targets, observed_endpoints, created_at, updated_at
+		SELECT fault_type, state, phase, targets, observed_endpoints, expected_service_down, created_at, updated_at
 		FROM backend_experiments
 		WHERE experiment_id = $1::uuid
-	`, id).Scan(&faultType, &state, &phase, &targetsRaw, &observedRaw, &createdAt, &updatedAt)
+	`, id).Scan(&faultType, &state, &phase, &targetsRaw, &observedRaw, &expectedDown, &createdAt, &updatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -184,6 +185,7 @@ func (p *Postgres) getBackendExperimentSnapshot(id string) (*models.Experiment, 
 	}
 	_ = json.Unmarshal(targetsRaw, &exp.Targets)
 	_ = json.Unmarshal(observedRaw, &exp.ObservedEndpoints)
+	exp.ExpectedServiceDown = expectedDown
 	return exp, nil
 }
 

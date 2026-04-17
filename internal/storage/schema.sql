@@ -132,6 +132,9 @@ CREATE TABLE IF NOT EXISTS backend_experiments (
     updated_at TIMESTAMP
 );
 
+ALTER TABLE IF EXISTS backend_experiments
+    ADD COLUMN IF NOT EXISTS expected_service_down BOOLEAN DEFAULT FALSE;
+
 CREATE TABLE IF NOT EXISTS android_experiments (
     experiment_id UUID PRIMARY KEY,
     fault_type TEXT,

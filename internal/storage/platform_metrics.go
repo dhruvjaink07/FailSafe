@@ -101,15 +101,16 @@ func (p *Postgres) InsertPlatformExperiment(exp *models.Experiment) error {
 		_, err := p.Pool.Exec(context.Background(), `
 			INSERT INTO backend_experiments (
 				experiment_id, fault_type, state, phase,
-				targets, observed_endpoints,
+				targets, observed_endpoints, expected_service_down,
 				created_at, updated_at
-			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
 			ON CONFLICT (experiment_id) DO UPDATE
 			SET fault_type = EXCLUDED.fault_type,
 				state = EXCLUDED.state,
 				phase = EXCLUDED.phase,
 				targets = EXCLUDED.targets,
 				observed_endpoints = EXCLUDED.observed_endpoints,
+				expected_service_down = EXCLUDED.expected_service_down,
 				updated_at = EXCLUDED.updated_at
 		`,
 			exp.ID,
@@ -118,6 +119,7 @@ func (p *Postgres) InsertPlatformExperiment(exp *models.Experiment) error {
 			exp.Phase,
 			string(targetsJSON),
 			string(observedJSON),
+			exp.ExpectedServiceDown,
 			exp.CreatedAt,
 			exp.UpdatedAt,
 		)

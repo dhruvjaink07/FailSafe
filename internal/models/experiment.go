@@ -77,6 +77,10 @@ type Experiment struct {
 
 	TargetEndpointMap map[string][]string `json:"target_endpoint_map"`
 	GraphMetadata     GraphMetadata       `json:"graph_metadata"`
+	// If true, the experiment intentionally shuts down one or more services
+	// (e.g., fault_type contains "kill"). Aggregators should ignore
+	// expected service-down endpoints when reporting actionable anomalies.
+	ExpectedServiceDown bool `json:"expected_service_down,omitempty"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

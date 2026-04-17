@@ -37,3 +37,7 @@ node_modules/
 
 # Coverage
 coverage.out
+
+# Experiment artifacts (local runs)
+deployments/docker/experiments/results/
+experiments/results/

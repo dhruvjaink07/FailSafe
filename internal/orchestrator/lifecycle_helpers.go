@@ -23,6 +23,12 @@ func (o *Orchestrator) createExperiment(
 	deps models.DependencyGraph,
 	targetMap map[string][]string,
 ) *models.Experiment {
+	// mark experiments that intentionally shut down services (kill)
+	isExpectedDown := false
+	if strings.Contains(strings.ToLower(faultType), "kill") {
+		isExpectedDown = true
+	}
+
 	return &models.Experiment{
 		ID:              id,
 		Targets:         targets,
@@ -35,12 +41,13 @@ func (o *Orchestrator) createExperiment(
 		CreatedAt:       time.Now(),
 		UpdatedAt:       time.Now(),
 
-		Adaptive:          adaptive,
-		StepIntensity:     stepIntensity,
-		MaxIntensity:      maxIntensity,
-		DependencyGraph:   deps,
-		TargetEndpointMap: targetMap,
-		TimelineHistory:   make(map[int]models.IntensityTimeline),
+		Adaptive:            adaptive,
+		StepIntensity:       stepIntensity,
+		MaxIntensity:        maxIntensity,
+		DependencyGraph:     deps,
+		TargetEndpointMap:   targetMap,
+		TimelineHistory:     make(map[int]models.IntensityTimeline),
+		ExpectedServiceDown: isExpectedDown,
 	}
 }
 
@@ -167,7 +174,26 @@ func (o *Orchestrator) GetExperiment(id string) (map[string]interface{}, error) 
 			var duration int64 = -1
 			if hasRec {
 				duration = recTime.Sub(impactTime).Milliseconds()
-				allRecoveryDurations = append(allRecoveryDurations, duration)
+				// If experiment intentionally shuts down services, and this
+				// endpoint belongs to a targeted endpoint list, do not count
+				// its downtime in aggregated recovery/downtime stats.
+				ignore := false
+				if exp.ExpectedServiceDown && len(exp.TargetEndpointMap) > 0 {
+					for _, eps := range exp.TargetEndpointMap {
+						for _, e := range eps {
+							if e == ep {
+								ignore = true
+								break
+							}
+						}
+						if ignore {
+							break
+						}
+					}
+				}
+				if !ignore {
+					allRecoveryDurations = append(allRecoveryDurations, duration)
+				}
 			}
 			// Down duration: from first impact to recovery
 			impacts[ep] = map[string]interface{}{
@@ -176,7 +202,24 @@ func (o *Orchestrator) GetExperiment(id string) (map[string]interface{}, error) 
 				"duration_ms":  duration,
 			}
 			if duration > 0 {
-				allDowntimeDurations = append(allDowntimeDurations, duration)
+				// append to total downtime only if not an expected shutdown
+				skip := false
+				if exp.ExpectedServiceDown && len(exp.TargetEndpointMap) > 0 {
+					for _, eps := range exp.TargetEndpointMap {
+						for _, e := range eps {
+							if e == ep {
+								skip = true
+								break
+							}
+						}
+						if skip {
+							break
+						}
+					}
+				}
+				if !skip {
+					allDowntimeDurations = append(allDowntimeDurations, duration)
+				}
 			}
 		}
 		// Fault cause and cascade path
@@ -199,7 +242,25 @@ func (o *Orchestrator) GetExperiment(id string) (map[string]interface{}, error) 
 		// Anomaly detection: endpoints with recovery > 2x median
 		var anomalyList []string
 		var durations []int64
-		for _, v := range impacts {
+		for epKey, v := range impacts {
+			// skip durations for expected shutdown endpoints
+			if exp.ExpectedServiceDown && len(exp.TargetEndpointMap) > 0 {
+				skip := false
+				for _, eps := range exp.TargetEndpointMap {
+					for _, e := range eps {
+						if e == epKey {
+							skip = true
+							break
+						}
+					}
+					if skip {
+						break
+					}
+				}
+				if skip {
+					continue
+				}
+			}
 			if d, ok := v["duration_ms"].(int64); ok && d > 0 {
 				durations = append(durations, d)
 			}
@@ -209,6 +270,24 @@ func (o *Orchestrator) GetExperiment(id string) (map[string]interface{}, error) 
 			sort.Slice(durations, func(i, j int) bool { return durations[i] < durations[j] })
 			median = durations[len(durations)/2]
 			for ep, v := range impacts {
+				// skip expected shutdown endpoints when classifying anomalies
+				if exp.ExpectedServiceDown && len(exp.TargetEndpointMap) > 0 {
+					skip := false
+					for _, eps := range exp.TargetEndpointMap {
+						for _, e := range eps {
+							if e == ep {
+								skip = true
+								break
+							}
+						}
+						if skip {
+							break
+						}
+					}
+					if skip {
+						continue
+					}
+				}
 				if d, ok := v["duration_ms"].(int64); ok && d > 2*median && median > 0 {
 					anomalyList = append(anomalyList, ep)
 				}
