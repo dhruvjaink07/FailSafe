@@ -33,6 +33,37 @@ func (p *Postgres) GetExperimentTargetType(id string) (string, error) {
 	return normalizePlatform(targetType), nil
 }
 
+func (p *Postgres) ListExperiments() ([]*models.Experiment, error) {
+	query := `
+		SELECT id, fault_type, state, phase, created_at, updated_at,
+		       max_intensity, breaking_intensity, max_stable_intensity
+		FROM experiments
+		ORDER BY created_at DESC
+		LIMIT 100
+	`
+
+	rows, err := p.Pool.Query(context.Background(), query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var experiments []*models.Experiment
+	for rows.Next() {
+		exp := &models.Experiment{}
+		err := rows.Scan(
+			&exp.ID, &exp.FaultType, &exp.State, &exp.Phase, &exp.CreatedAt, &exp.UpdatedAt,
+			&exp.MaxIntensity, &exp.BreakingIntensity, &exp.MaxStableIntensity,
+		)
+		if err != nil {
+			return nil, err
+		}
+		experiments = append(experiments, exp)
+	}
+
+	return experiments, nil
+}
+
 func (p *Postgres) GetPlatformStatusPayload(targetType, id string) (map[string]interface{}, error) {
 	table := "backend_status_metrics"
 	switch normalizePlatform(targetType) {
@@ -61,6 +92,40 @@ func (p *Postgres) GetPlatformStatusPayload(targetType, id string) (map[string]i
 		return nil, err
 	}
 	return payload, nil
+}
+
+func (p *Postgres) GetLatestSystemMetrics() (map[string]interface{}, error) {
+	// Query the most recent summary from the experiment_summary table.
+	// We join with experiments to ensure we get the latest one by created_at.
+	query := `
+		SELECT s.blast_radius, s.cascade_depth, s.system_severity
+		FROM experiment_summary s
+		JOIN experiments e ON s.experiment_id = e.id
+		ORDER BY e.created_at DESC
+		LIMIT 1
+	`
+
+	var blast float64
+	var depth int
+	var severity string
+	err := p.Pool.QueryRow(context.Background(), query).Scan(&blast, &depth, &severity)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Fallback to defaults if no experiments exist yet
+			return map[string]interface{}{
+				"blastRadius":  0,
+				"cascadeDepth": 0,
+				"severity":     "low",
+			}, nil
+		}
+		return nil, err
+	}
+
+	return map[string]interface{}{
+		"blastRadius":  blast,
+		"cascadeDepth": depth,
+		"severity":     severity,
+	}, nil
 }
 
 func (p *Postgres) GetFrontendMetricsRaw(id string) ([]models.FrontendMetrics, error) {

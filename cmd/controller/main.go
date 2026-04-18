@@ -52,7 +52,7 @@ func main() {
 	http.HandleFunc("/upload/apk", handlers.UploadAPKHandler())
 	http.HandleFunc("/scenarios/presets", handlers.ScenarioPresetsHandler())
 	http.HandleFunc("/frontend/metrics", handlers.FrontendMetricsHandler(orch))
-
+	
 	startRoles := []string{"engineer", "admin"}
 	metricsRoles := []string{"viewer", "engineer", "admin"}
 	keyCreateRoles := []string{"engineer", "admin"}
@@ -60,6 +60,9 @@ func main() {
 		return handlers.RequireAPIKey(db, roles, action, next)
 	}
 	_ = keyCreateRoles
+
+	http.HandleFunc("/metrics/system", wrap("read_metrics", metricsRoles, handlers.SystemMetricsHandler(orch)))
+	http.HandleFunc("/experiments", wrap("read_metrics", metricsRoles, handlers.ExperimentsListHandler(orch)))
 	http.HandleFunc("/internal/api-keys/create", handlers.CreateAPIKeyHandler(db, os.Getenv("API_KEY_BOOTSTRAP_TOKEN")))
 	http.HandleFunc("/environment/containers", wrap("list_containers", metricsRoles, handlers.DockerContainersListHandler(dockerManager)))
 	http.HandleFunc("/environment/containers/start", wrap("start_container", startRoles, handlers.DockerContainerStartHandler(dockerManager)))
@@ -81,6 +84,14 @@ func main() {
 	http.HandleFunc("/experiments/frontend/stop", wrap("stop_experiment", startRoles, handlers.ExperimentFrontendStopHandler(orch)))
 	http.HandleFunc("/experiments/frontend/metrics", wrap("read_metrics", metricsRoles, handlers.ExperimentFrontendMetricsHandler(orch)))
 	http.HandleFunc("/experiments/frontend/fault-command", handlers.ExperimentFrontendFaultCommandHandler(orch))
+
+	// ML Pipeline Proxy Routes (Connects Failsafe to Python ML API)
+	mlAPI := "http://127.0.0.1:5000"
+	http.HandleFunc("/api/predict/latest", handlers.MLProxyHandler(mlAPI))
+	http.HandleFunc("/api/predict", handlers.MLProxyHandler(mlAPI))
+	http.HandleFunc("/api/forecast", handlers.MLProxyHandler(mlAPI))
+	http.HandleFunc("/api/explain/global", handlers.MLProxyHandler(mlAPI))
+	http.HandleFunc("/api/explain/local", handlers.MLProxyHandler(mlAPI))
 
 	log.Println("Server running on :8000")
 	log.Fatal(http.ListenAndServe(":8000", nil))

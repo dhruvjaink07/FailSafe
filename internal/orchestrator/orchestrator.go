@@ -96,3 +96,21 @@ func NewOrchestrator(
 
 	return orch
 }
+
+func (o *Orchestrator) GetLatestSystemMetrics() (map[string]interface{}, error) {
+	if o.db == nil {
+		return map[string]interface{}{
+			"blastRadius":  0,
+			"cascadeDepth": 0,
+			"severity":     "low",
+		}, nil
+	}
+	return o.db.GetLatestSystemMetrics()
+}
+
+func (o *Orchestrator) ListExperiments() ([]*models.Experiment, error) {
+	if o.db == nil {
+		return []*models.Experiment{}, nil
+	}
+	return o.db.ListExperiments()
+}

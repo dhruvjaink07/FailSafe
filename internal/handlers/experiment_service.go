@@ -34,4 +34,6 @@ type ExperimentService interface {
 	GetFrontendMetrics(id string) (interface{}, error)
 	GetFrontendFaultCommand(id string) (map[string]interface{}, error)
 	AddFrontendMetrics(data []models.FrontendMetrics)
+	GetLatestSystemMetrics() (map[string]interface{}, error)
+	ListExperiments() ([]*models.Experiment, error)
 }
