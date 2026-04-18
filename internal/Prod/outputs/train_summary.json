@@ -1,0 +1,12 @@
+{
+  "n_train": 194,
+  "n_test": 49,
+  "n_features": 45,
+  "sarima_mae": 13.388,
+  "lgb_mae": 2.186,
+  "ensemble_mae": 2.101,
+  "ensemble_rmse": 2.663,
+  "tier_accuracy": 93.9,
+  "W_SARIMA": 0.05,
+  "W_LGB": 0.95
+}
