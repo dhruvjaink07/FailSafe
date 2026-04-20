@@ -73,6 +73,18 @@ func (f *FakeOrch) StreamBackendLogs(apiKeyID string, experimentID string, tail 
 }
 func (f *FakeOrch) AddFrontendMetrics(data []models.FrontendMetrics) {}
 
+func (f *FakeOrch) GetLatestSystemMetrics() (map[string]interface{}, error) {
+	return map[string]interface{}{
+		"backend":  map[string]interface{}{},
+		"android":  map[string]interface{}{},
+		"frontend": map[string]interface{}{},
+	}, nil
+}
+
+func (f *FakeOrch) ListExperiments() ([]*models.Experiment, error) {
+	return []*models.Experiment{}, nil
+}
+
 func makeFakeItems(n int) []map[string]interface{} {
 	out := make([]map[string]interface{}, 0, n)
 	for i := 0; i < n; i++ {

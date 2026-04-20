@@ -111,6 +111,9 @@ func main() {
 	http.HandleFunc("/experiments/frontend/stop", wrap("stop_experiment", startRoles, handlers.ExperimentFrontendStopHandler(orch)))
 	http.HandleFunc("/experiments/frontend/metrics", wrap("read_metrics", metricsRoles, handlers.ExperimentFrontendMetricsHandler(orch)))
 	http.HandleFunc("/experiments/frontend/fault-command", handlers.ExperimentFrontendFaultCommandHandler(orch))
+	http.HandleFunc("/metrics/system", wrap("read_metrics", metricsRoles, handlers.SystemMetricsHandler(orch)))
+	http.HandleFunc("/experiments", wrap("read_metrics", metricsRoles, handlers.ExperimentsListHandler(orch)))
+
 	http.HandleFunc("/experiments/history", wrap("read_metrics_history", metricsRoles, handlers.ExperimentHistoryHandler(orch)))
 	http.HandleFunc("/experiments/history/count", wrap("read_metrics_history", metricsRoles, handlers.ExperimentHistoryCountHandler(orch)))
 	http.HandleFunc("/experiments/history/detail", wrap("read_metrics_history", metricsRoles, handlers.ExperimentHistoryDetailHandler(orch)))

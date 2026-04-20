@@ -42,4 +42,6 @@ type ExperimentService interface {
 	// StreamBackendLogs streams backend container logs to the provided ResponseWriter.
 	StreamBackendLogs(apiKeyID string, experimentID string, tail int, w http.ResponseWriter, format string, follow bool) error
 	AddFrontendMetrics(data []models.FrontendMetrics)
+	GetLatestSystemMetrics() (map[string]interface{}, error)
+	ListExperiments() ([]*models.Experiment, error)
 }

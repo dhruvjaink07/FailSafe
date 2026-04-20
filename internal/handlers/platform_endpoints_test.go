@@ -230,6 +230,26 @@ func (f *fakeExperimentService) StreamBackendLogs(apiKeyID string, experimentID 
 
 func (f *fakeExperimentService) AddFrontendMetrics(data []models.FrontendMetrics) {}
 
+func (f *fakeExperimentService) GetLatestSystemMetrics() (map[string]interface{}, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return map[string]interface{}{
+		"backend":  f.backendMetrics,
+		"android":  f.androidMetrics,
+		"frontend": map[string]interface{}{"failsafe_index": map[string]interface{}{"score": 99.0}},
+	}, nil
+}
+
+func (f *fakeExperimentService) ListExperiments() ([]*models.Experiment, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]*models.Experiment, 0, len(f.experiments))
+	for _, e := range f.experiments {
+		out = append(out, e)
+	}
+	return out, nil
+}
+
 func newTestMux(orch ExperimentService) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/upload/apk", UploadAPKHandler())

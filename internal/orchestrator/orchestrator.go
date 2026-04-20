@@ -220,3 +220,17 @@ func (o *Orchestrator) StreamBackendLogs(apiKeyID, experimentID string, tail int
 	}
 	return nil
 }
+
+func (o *Orchestrator) GetLatestSystemMetrics() (map[string]interface{}, error) {
+	if o.db == nil {
+		return nil, errors.New("storage not configured")
+	}
+	return o.db.GetLatestSystemMetrics()
+}
+
+func (o *Orchestrator) ListExperiments() ([]*models.Experiment, error) {
+	if o.db == nil {
+		return nil, errors.New("storage not configured")
+	}
+	return o.db.ListExperiments()
+}
