@@ -1,0 +1,19 @@
+{
+  "metrics": [
+    {
+      "experiment_id": "7d5bdccf-5871-4e25-a156-c15eca3ee42d",
+      "phase": "baseline",
+      "page": "/",
+      "metrics": {
+        "lcp": 1200,
+        "cls": 0.04,
+        "inp": 90,
+        "long_tasks": 1,
+        "errors": 0,
+        "unhandled_rejections": 0
+      },
+      "api_calls": [],
+      "timestamp": 1776678718704
+    }
+  ]
+}

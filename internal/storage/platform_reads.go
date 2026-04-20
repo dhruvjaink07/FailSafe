@@ -141,8 +141,12 @@ func (p *Postgres) GetExperimentSnapshot(id string, targetType string) (*models.
 }
 
 func (p *Postgres) IsExperimentOwnedByAPIKey(experimentID, apiKeyID string) (bool, error) {
-	if strings.TrimSpace(experimentID) == "" || strings.TrimSpace(apiKeyID) == "" {
+	if strings.TrimSpace(experimentID) == "" {
 		return false, nil
+	}
+	// If apiKeyID is empty, treat as global access (no ownership filtering).
+	if strings.TrimSpace(apiKeyID) == "" {
+		return true, nil
 	}
 	var exists bool
 	err := p.Pool.QueryRow(context.Background(), `

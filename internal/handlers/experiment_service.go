@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"net/http"
+
 	"github.com/dhruvjaink07/failsafe/internal/models"
 	"github.com/dhruvjaink07/failsafe/internal/orchestrator"
 )
@@ -34,7 +36,10 @@ type ExperimentService interface {
 	GetFrontendMetrics(id string) (interface{}, error)
 	GetFrontendFaultCommand(id string) (map[string]interface{}, error)
 	GetExperimentHistory(apiKeyID string, limit int, offset int) ([]map[string]interface{}, error)
+	GetExperimentHistoryCount(apiKeyID string) (int, error)
 	GetExperimentHistoryDetail(apiKeyID string, experimentID string) (map[string]interface{}, error)
 	GetBackendLogs(apiKeyID string, experimentID string, tail int) (string, error)
+	// StreamBackendLogs streams backend container logs to the provided ResponseWriter.
+	StreamBackendLogs(apiKeyID string, experimentID string, tail int, w http.ResponseWriter, format string, follow bool) error
 	AddFrontendMetrics(data []models.FrontendMetrics)
 }

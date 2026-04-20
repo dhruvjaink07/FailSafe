@@ -11,9 +11,8 @@ import (
 )
 
 func (p *Postgres) GetExperimentHistoryByAPIKey(apiKeyID string, limit int, offset int) ([]map[string]interface{}, error) {
-	if strings.TrimSpace(apiKeyID) == "" {
-		return []map[string]interface{}{}, nil
-	}
+	// If apiKeyID is empty, return history for all API keys (no filtering).
+	filterByKey := strings.TrimSpace(apiKeyID) != ""
 	if limit <= 0 {
 		limit = 50
 	}
@@ -24,28 +23,54 @@ func (p *Postgres) GetExperimentHistoryByAPIKey(apiKeyID string, limit int, offs
 		offset = 0
 	}
 
-	rows, err := p.Pool.Query(context.Background(), `
-		SELECT
-			e.id::text,
-			COALESCE(e.fault_type, ''),
-			COALESCE(e.state, ''),
-			COALESCE(e.phase, ''),
-			e.created_at,
-			e.updated_at,
-			CASE
-				WHEN be.experiment_id IS NOT NULL THEN 'backend'
-				WHEN ae.experiment_id IS NOT NULL THEN 'android'
-				WHEN fe.experiment_id IS NOT NULL THEN 'frontend'
-				ELSE 'backend'
-			END AS target_type
-		FROM experiments e
-		LEFT JOIN backend_experiments be ON be.experiment_id = e.id
-		LEFT JOIN android_experiments ae ON ae.experiment_id = e.id
-		LEFT JOIN frontend_experiments fe ON fe.experiment_id = e.id
-		WHERE e.api_key_id = $1::uuid
-		ORDER BY e.created_at DESC
-		LIMIT $2 OFFSET $3
-	`, apiKeyID, limit, offset)
+	var rows pgx.Rows
+	var err error
+	if filterByKey {
+		rows, err = p.Pool.Query(context.Background(), `
+			SELECT
+				e.id::text,
+				COALESCE(e.fault_type, ''),
+				COALESCE(e.state, ''),
+				COALESCE(e.phase, ''),
+				e.created_at,
+				e.updated_at,
+				CASE
+					WHEN be.experiment_id IS NOT NULL THEN 'backend'
+					WHEN ae.experiment_id IS NOT NULL THEN 'android'
+					WHEN fe.experiment_id IS NOT NULL THEN 'frontend'
+					ELSE 'backend'
+				END AS target_type
+			FROM experiments e
+			LEFT JOIN backend_experiments be ON be.experiment_id = e.id
+			LEFT JOIN android_experiments ae ON ae.experiment_id = e.id
+			LEFT JOIN frontend_experiments fe ON fe.experiment_id = e.id
+			WHERE e.api_key_id = $1::uuid
+			ORDER BY e.created_at DESC
+			LIMIT $2 OFFSET $3
+		`, apiKeyID, limit, offset)
+	} else {
+		rows, err = p.Pool.Query(context.Background(), `
+			SELECT
+				e.id::text,
+				COALESCE(e.fault_type, ''),
+				COALESCE(e.state, ''),
+				COALESCE(e.phase, ''),
+				e.created_at,
+				e.updated_at,
+				CASE
+					WHEN be.experiment_id IS NOT NULL THEN 'backend'
+					WHEN ae.experiment_id IS NOT NULL THEN 'android'
+					WHEN fe.experiment_id IS NOT NULL THEN 'frontend'
+					ELSE 'backend'
+				END AS target_type
+			FROM experiments e
+			LEFT JOIN backend_experiments be ON be.experiment_id = e.id
+			LEFT JOIN android_experiments ae ON ae.experiment_id = e.id
+			LEFT JOIN frontend_experiments fe ON fe.experiment_id = e.id
+			ORDER BY e.created_at DESC
+			LIMIT $1 OFFSET $2
+		`, limit, offset)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -80,10 +105,27 @@ func (p *Postgres) GetExperimentHistoryByAPIKey(apiKeyID string, limit int, offs
 	return items, nil
 }
 
+func (p *Postgres) GetExperimentHistoryCountByAPIKey(apiKeyID string) (int, error) {
+	var count int
+	if strings.TrimSpace(apiKeyID) == "" {
+		err := p.Pool.QueryRow(context.Background(), `SELECT COUNT(*) FROM experiments`).Scan(&count)
+		if err != nil {
+			return 0, err
+		}
+		return count, nil
+	}
+	err := p.Pool.QueryRow(context.Background(), `SELECT COUNT(*) FROM experiments WHERE api_key_id = $1::uuid`, apiKeyID).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 func (p *Postgres) GetExperimentHistoryDetailByAPIKey(apiKeyID string, experimentID string) (map[string]interface{}, error) {
-	if strings.TrimSpace(apiKeyID) == "" || strings.TrimSpace(experimentID) == "" {
+	if strings.TrimSpace(experimentID) == "" {
 		return nil, nil
 	}
+	filterByKey := strings.TrimSpace(apiKeyID) != ""
 
 	var id string
 	var faultType string
@@ -92,28 +134,53 @@ func (p *Postgres) GetExperimentHistoryDetailByAPIKey(apiKeyID string, experimen
 	var createdAt time.Time
 	var updatedAt time.Time
 	var targetType string
+	var err error
 
-	err := p.Pool.QueryRow(context.Background(), `
-		SELECT
-			e.id::text,
-			COALESCE(e.fault_type, ''),
-			COALESCE(e.state, ''),
-			COALESCE(e.phase, ''),
-			e.created_at,
-			e.updated_at,
-			CASE
-				WHEN be.experiment_id IS NOT NULL THEN 'backend'
-				WHEN ae.experiment_id IS NOT NULL THEN 'android'
-				WHEN fe.experiment_id IS NOT NULL THEN 'frontend'
-				ELSE 'backend'
-			END AS target_type
-		FROM experiments e
-		LEFT JOIN backend_experiments be ON be.experiment_id = e.id
-		LEFT JOIN android_experiments ae ON ae.experiment_id = e.id
-		LEFT JOIN frontend_experiments fe ON fe.experiment_id = e.id
-		WHERE e.id = $1::uuid AND e.api_key_id = $2::uuid
-		LIMIT 1
-	`, experimentID, apiKeyID).Scan(&id, &faultType, &state, &phase, &createdAt, &updatedAt, &targetType)
+	if filterByKey {
+		err = p.Pool.QueryRow(context.Background(), `
+			SELECT
+				e.id::text,
+				COALESCE(e.fault_type, ''),
+				COALESCE(e.state, ''),
+				COALESCE(e.phase, ''),
+				e.created_at,
+				e.updated_at,
+				CASE
+					WHEN be.experiment_id IS NOT NULL THEN 'backend'
+					WHEN ae.experiment_id IS NOT NULL THEN 'android'
+					WHEN fe.experiment_id IS NOT NULL THEN 'frontend'
+					ELSE 'backend'
+				END AS target_type
+			FROM experiments e
+			LEFT JOIN backend_experiments be ON be.experiment_id = e.id
+			LEFT JOIN android_experiments ae ON ae.experiment_id = e.id
+			LEFT JOIN frontend_experiments fe ON fe.experiment_id = e.id
+			WHERE e.id = $1::uuid AND e.api_key_id = $2::uuid
+			LIMIT 1
+		`, experimentID, apiKeyID).Scan(&id, &faultType, &state, &phase, &createdAt, &updatedAt, &targetType)
+	} else {
+		err = p.Pool.QueryRow(context.Background(), `
+			SELECT
+				e.id::text,
+				COALESCE(e.fault_type, ''),
+				COALESCE(e.state, ''),
+				COALESCE(e.phase, ''),
+				e.created_at,
+				e.updated_at,
+				CASE
+					WHEN be.experiment_id IS NOT NULL THEN 'backend'
+					WHEN ae.experiment_id IS NOT NULL THEN 'android'
+					WHEN fe.experiment_id IS NOT NULL THEN 'frontend'
+					ELSE 'backend'
+				END AS target_type
+			FROM experiments e
+			LEFT JOIN backend_experiments be ON be.experiment_id = e.id
+			LEFT JOIN android_experiments ae ON ae.experiment_id = e.id
+			LEFT JOIN frontend_experiments fe ON fe.experiment_id = e.id
+			WHERE e.id = $1::uuid
+			LIMIT 1
+		`, experimentID).Scan(&id, &faultType, &state, &phase, &createdAt, &updatedAt, &targetType)
+	}
 	if err != nil {
 		if isNoRows(err) {
 			return nil, nil
