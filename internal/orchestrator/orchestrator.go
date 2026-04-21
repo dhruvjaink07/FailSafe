@@ -127,3 +127,17 @@ func (o *Orchestrator) GetBackendLogs(apiKeyID, experimentID string, tail int) (
 	container := exp.Targets[0]
 	return o.docker.GetContainerLogs(container, tail)
 }
+
+func (o *Orchestrator) GetLatestSystemMetrics() (map[string]interface{}, error) {
+	if o.db == nil {
+		return nil, errors.New("storage not configured")
+	}
+	return o.db.GetLatestSystemMetrics()
+}
+
+func (o *Orchestrator) ListExperiments() ([]*models.Experiment, error) {
+	if o.db == nil {
+		return nil, errors.New("storage not configured")
+	}
+	return o.db.ListExperiments()
+}

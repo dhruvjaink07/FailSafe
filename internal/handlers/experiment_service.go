@@ -37,4 +37,6 @@ type ExperimentService interface {
 	GetExperimentHistoryDetail(apiKeyID string, experimentID string) (map[string]interface{}, error)
 	GetBackendLogs(apiKeyID string, experimentID string, tail int) (string, error)
 	AddFrontendMetrics(data []models.FrontendMetrics)
+	GetLatestSystemMetrics() (map[string]interface{}, error)
+	ListExperiments() ([]*models.Experiment, error)
 }

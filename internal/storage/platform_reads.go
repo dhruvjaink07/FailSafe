@@ -262,3 +262,65 @@ func (p *Postgres) getFrontendExperimentSnapshot(id string) (*models.Experiment,
 	_ = json.Unmarshal(targetsRaw, &exp.Targets)
 	return exp, nil
 }
+
+func (p *Postgres) ListExperiments() ([]*models.Experiment, error) {
+	query := `
+		SELECT id, fault_type, state, phase, created_at, updated_at,
+		       max_intensity, breaking_intensity, max_stable_intensity
+		FROM experiments
+		ORDER BY created_at DESC
+		LIMIT 100
+	`
+
+	rows, err := p.Pool.Query(context.Background(), query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var experiments []*models.Experiment
+	for rows.Next() {
+		exp := &models.Experiment{}
+		err := rows.Scan(
+			&exp.ID, &exp.FaultType, &exp.State, &exp.Phase, &exp.CreatedAt, &exp.UpdatedAt,
+			&exp.MaxIntensity, &exp.BreakingIntensity, &exp.MaxStableIntensity,
+		)
+		if err != nil {
+			return nil, err
+		}
+		experiments = append(experiments, exp)
+	}
+
+	return experiments, nil
+}
+
+func (p *Postgres) GetLatestSystemMetrics() (map[string]interface{}, error) {
+	query := `
+		SELECT s.blast_radius, s.cascade_depth, s.system_severity
+		FROM experiment_summary s
+		JOIN experiments e ON s.experiment_id = e.id
+		ORDER BY e.created_at DESC
+		LIMIT 1
+	`
+
+	var blast float64
+	var depth int
+	var severity string
+	err := p.Pool.QueryRow(context.Background(), query).Scan(&blast, &depth, &severity)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return map[string]interface{}{
+				"blastRadius":  0,
+				"cascadeDepth": 0,
+				"severity":     "low",
+			}, nil
+		}
+		return nil, err
+	}
+
+	return map[string]interface{}{
+		"blastRadius":  blast,
+		"cascadeDepth": depth,
+		"severity":     severity,
+	}, nil
+}

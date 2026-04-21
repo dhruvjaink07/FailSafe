@@ -49,3 +49,39 @@ func ScenarioPresetsHandler() http.HandlerFunc {
 		_ = json.NewEncoder(w).Encode(response)
 	}
 }
+
+func SystemMetricsHandler(orch ExperimentService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		metrics, err := orch.GetLatestSystemMetrics()
+		if err != nil {
+			http.Error(w, "failed to fetch system metrics: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(metrics)
+	}
+}
+
+func ExperimentsListHandler(orch ExperimentService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		experiments, err := orch.ListExperiments()
+		if err != nil {
+			http.Error(w, "failed to fetch experiments: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(experiments)
+	}
+}
