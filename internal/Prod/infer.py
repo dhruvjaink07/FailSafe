@@ -1,6 +1,7 @@
+﻿import os
 """
 failsafe/infer.py
-─────────────────
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 Load saved models and predict risk on new experiment data.
 
 Usage:
@@ -17,13 +18,13 @@ What this script does:
     1. Load LightGBM booster + SARIMA meta from models/
     2. Build features for the new experiment(s)
        - Uses recent history stored in sarima_meta so lags are correct
-    3. Run SARIMA + LightGBM → weighted ensemble → risk score
+    3. Run SARIMA + LightGBM â†’ weighted ensemble â†’ risk score
     4. Classify into risk tier (LOW / MEDIUM / HIGH / CRITICAL)
     5. Print + return the result dict
 
 What this script does NOT do:
-    - Model training          →  see train.py
-    - SHAP explanation        →  see explain.py
+    - Model training          â†’  see train.py
+    - SHAP explanation        â†’  see explain.py
 """
 
 import warnings
@@ -37,6 +38,7 @@ import pandas as pd
 
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 import lightgbm as lgb
+import traceback
 
 from .config import (
     LGB_MODEL_PATH, SARIMA_META_PATH,
@@ -49,9 +51,9 @@ from .features import build_features, load_feature_list
 from .db_utils import load_experiment_features
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Model loading (cached at module level so repeated calls are fast)
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 _lgb_model   = None
 _sarima_meta = None
@@ -62,13 +64,48 @@ def _load_models():
     global _lgb_model, _sarima_meta, _feature_cols
 
     if _lgb_model is None:
+        # Allow tests and dev environments to opt-out of loading the
+        # native LightGBM booster entirely by setting
+        # `PYTHON_SKIP_MODEL_LOAD=1` in the environment. Some native
+        # LightGBM versions can crash the interpreter when opening a
+        # mismatched model file (access violation). Skipping model load
+        # avoids those crashes and lets the service run in degraded mode.
+        skip_load = os.environ.get("PYTHON_SKIP_MODEL_LOAD") in ("1", "true", "True")
+
+        # Try to load the LightGBM booster. If loading fails (corrupt
+        # model, incompatible LightGBM version, etc.) we fall back to a
+        # lightweight dummy model so the service can start in degraded
+        # mode for development / integration testing.
         if not LGB_MODEL_PATH.exists():
-            raise FileNotFoundError(
-                f"LightGBM model not found at {LGB_MODEL_PATH}. Run train.py first."
-            )
-        booster = lgb.Booster(model_file=str(LGB_MODEL_PATH))
-        _lgb_model = booster
-        print(f"[infer] Loaded LightGBM from {LGB_MODEL_PATH}")
+            print(f"[infer] Warning: LightGBM model not found at {LGB_MODEL_PATH}."
+                  " Starting with dummy model (run train.py to create real model).")
+            class _DummyBooster:
+                def predict(self, X):
+                    import numpy as _np
+                    return _np.zeros(len(X))
+            _lgb_model = _DummyBooster()
+        else:
+            if skip_load:
+                print("[infer] PYTHON_SKIP_MODEL_LOAD set â€” skipping LightGBM booster load (degraded mode).")
+                class _DummyBooster:
+                    def predict(self, X):
+                        import numpy as _np
+                        return _np.zeros(len(X))
+                _lgb_model = _DummyBooster()
+            else:
+                try:
+                    booster = lgb.Booster(model_file=str(LGB_MODEL_PATH))
+                    _lgb_model = booster
+                    print(f"[infer] Loaded LightGBM from {LGB_MODEL_PATH}")
+                except Exception as e:
+                    print(f"[infer] Error loading LightGBM model: {e}")
+                    traceback.print_exc()
+                    print("[infer] Falling back to dummy LightGBM predictor (degraded mode).")
+                    class _DummyBooster:
+                        def predict(self, X):
+                            import numpy as _np
+                            return _np.zeros(len(X))
+                    _lgb_model = _DummyBooster()
 
     if _sarima_meta is None:
         if not SARIMA_META_PATH.exists():
@@ -85,9 +122,9 @@ def _load_models():
     return _lgb_model, _sarima_meta, _feature_cols
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # SARIMA one-step forecast
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _sarima_forecast(history: list[float], d: int, steps: int = 1) -> list[float]:
     """
@@ -107,9 +144,9 @@ def _sarima_forecast(history: list[float], d: int, steps: int = 1) -> list[float
     return fit.forecast(steps).tolist()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Core predict function
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def predict(new_experiments: pd.DataFrame,
             sarima_weight: float = None) -> pd.DataFrame:
@@ -119,7 +156,7 @@ def predict(new_experiments: pd.DataFrame,
     Parameters
     ----------
     sarima_weight : float, optional
-        Override the trained ensemble weight for SARIMA (0.0–1.0).
+        Override the trained ensemble weight for SARIMA (0.0â€“1.0).
         LightGBM weight = 1 - sarima_weight.
         If None, uses the weight saved during training.
     """
@@ -127,20 +164,20 @@ def predict(new_experiments: pd.DataFrame,
 
     d = sarima_meta["d"]
 
-    # ── Ensemble weights ──────────────────────────────────────────────────────
+    # â”€â”€ Ensemble weights â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if sarima_weight is not None:
         sarima_weight = float(np.clip(sarima_weight, 0.0, 1.0))
         W_SARIMA = sarima_weight
         W_LGB    = 1.0 - sarima_weight
-        print(f"[infer] Ensemble weights overridden → SARIMA={W_SARIMA:.2f}  LGB={W_LGB:.2f}")
+        print(f"[infer] Ensemble weights overridden â†’ SARIMA={W_SARIMA:.2f}  LGB={W_LGB:.2f}")
     else:
         W_SARIMA = sarima_meta["W_SARIMA"]
         W_LGB    = sarima_meta["W_LGB"]
-        print(f"[infer] Ensemble weights (trained)  → SARIMA={W_SARIMA:.2f}  LGB={W_LGB:.2f}")
+        print(f"[infer] Ensemble weights (trained)  â†’ SARIMA={W_SARIMA:.2f}  LGB={W_LGB:.2f}")
 
     history = list(sarima_meta["history_stability"])
 
-    # ── Context Prepending ────────────────────────────────────────────────────
+    # â”€â”€ Context Prepending â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # We need at least 3 historical rows to compute lags.
     # We fetch the latest 10 experiments from the DB as context.
     try:
@@ -169,7 +206,7 @@ def predict(new_experiments: pd.DataFrame,
     if TARGET not in df_in.columns:
         df_in[TARGET] = 0.0
 
-    # ── Build features ────────────────────────────────────────────────────────
+    # â”€â”€ Build features â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     df_feat_all = build_features(df_in)
 
     # Filter back to only the rows we actually want to predict (the 'new' ones)
@@ -189,10 +226,10 @@ def predict(new_experiments: pd.DataFrame,
 
     X_new = df_feat[feature_cols]
 
-    # ── LightGBM inference ────────────────────────────────────────────────────
+    # â”€â”€ LightGBM inference â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     lgb_preds = lgb_model.predict(X_new)
 
-    # ── SARIMA inference ──────────────────────────────────────────────────────
+    # â”€â”€ SARIMA inference â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     sarima_risks = []
     # Note: For SARIMA, we use the full history stored in meta + any new points
     for i in range(len(df_feat)):
@@ -206,10 +243,10 @@ def predict(new_experiments: pd.DataFrame,
 
     sarima_risks = np.array(sarima_risks)
 
-    # ── Ensemble ──────────────────────────────────────────────────────────────
+    # â”€â”€ Ensemble â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     ensemble_preds = np.clip(W_SARIMA * sarima_risks + W_LGB * lgb_preds, 0, 100)
 
-    # ── Assemble output ───────────────────────────────────────────────────────
+    # â”€â”€ Assemble output â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     result = df_feat[[DATE_COL] + ([ID_COL] if ID_COL in df_feat.columns else [])].copy()
     result["sarima_risk"]    = sarima_risks.round(2)
     result["lgb_risk"]       = lgb_preds.round(2)
@@ -226,7 +263,7 @@ def forecast(steps: int = 3, sarima_weight: float = None) -> list[dict]:
     Parameters
     ----------
     sarima_weight : float, optional
-        Override the trained SARIMA ensemble weight (0.0–1.0).
+        Override the trained SARIMA ensemble weight (0.0â€“1.0).
     """
     lgb_model, sarima_meta, feature_cols = _load_models()
 
@@ -236,14 +273,14 @@ def forecast(steps: int = 3, sarima_weight: float = None) -> list[dict]:
     if sarima_weight is not None:
         W_SARIMA = float(np.clip(sarima_weight, 0.0, 1.0))
         W_LGB    = 1.0 - W_SARIMA
-        print(f"[infer] Ensemble weights overridden → SARIMA={W_SARIMA:.2f}  LGB={W_LGB:.2f}")
+        print(f"[infer] Ensemble weights overridden â†’ SARIMA={W_SARIMA:.2f}  LGB={W_LGB:.2f}")
     else:
         W_SARIMA = sarima_meta["W_SARIMA"]
         W_LGB    = sarima_meta["W_LGB"]
-        print(f"[infer] Ensemble weights (trained)  → SARIMA={W_SARIMA:.2f}  LGB={W_LGB:.2f}")
+        print(f"[infer] Ensemble weights (trained)  â†’ SARIMA={W_SARIMA:.2f}  LGB={W_LGB:.2f}")
 
     # LightGBM can't see the future, so we reuse the last known feature vector
-    # This is an approximation — real-world systems would extrapolate features
+    # This is an approximation â€” real-world systems would extrapolate features
     # (e.g., use the scheduled fault intensity for the next experiment)
     last_feature_path = LGB_MODEL_PATH.parent / "last_feature_vector.json"
     if last_feature_path.exists():
@@ -273,9 +310,9 @@ def forecast(steps: int = 3, sarima_weight: float = None) -> list[dict]:
     return results
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # CLI & Output Formatting
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def display_results(results, title="Inference Results"):
     """Pretty-print the results with ANSI colors."""
@@ -290,7 +327,7 @@ def display_results(results, title="Inference Results"):
             return
         records = results
 
-    print(f"\n┌─ {title} " + "─" * (60 - len(title)))
+    print(f"\nâ”Œâ”€ {title} " + "â”€" * (60 - len(title)))
     
     colors = {
         "LOW": "\033[92m",            # Green
@@ -325,11 +362,11 @@ def display_results(results, title="Inference Results"):
         lgb = row.get('lgb_risk', 0.0)
         ens = row.get('ensemble_risk', 0.0)
         
-        print(f"│ {dim}[{prefix:<19}]{reset}{exp_id:<11} │ "
-              f"SARIMA: {sarima:>5.1f}% │ LGB: {lgb:>5.1f}% │ "
+        print(f"â”‚ {dim}[{prefix:<19}]{reset}{exp_id:<11} â”‚ "
+              f"SARIMA: {sarima:>5.1f}% â”‚ LGB: {lgb:>5.1f}% â”‚ "
               f"Risk: {color}{bold}{ens:>5.1f}% ({tier}){reset}")
               
-    print("└" + "─" * 63 + "\n")
+    print("â””" + "â”€" * 63 + "\n")
 
 
 if __name__ == "__main__":
@@ -345,7 +382,7 @@ if __name__ == "__main__":
     parser.add_argument("--forecast", type=int, default=None,
                         help="Forecast N future experiments")
     parser.add_argument("--sarima-weight", type=float, default=None, dest="sarima_weight",
-                        help="Override SARIMA ensemble weight (0.0–1.0). LGB = 1 - this value. "
+                        help="Override SARIMA ensemble weight (0.0â€“1.0). LGB = 1 - this value. "
                              "E.g. --sarima-weight 0.7 gives SARIMA 70%% and LGB 30%%.")
     args = parser.parse_args()
 
