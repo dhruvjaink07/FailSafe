@@ -37,3 +37,57 @@ node_modules/
 
 # Coverage
 coverage.out
+
+# Experiment artifacts (local runs)
+deployments/docker/experiments/results/
+experiments/results/
+
+
+# Python Cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual Environments
+.venv/
+env/
+venv/
+ENV/
+
+# Jupyter Notebook Checkpoints
+.ipynb_checkpoints/
+
+# PyInstaller
+.build/
+dist/
+build/
+*.spec
+
+# Logs
+*.log
+
+# Environment Variables
+.env
+.env.*  # Optional: excludes .env files
+
+# IDE and Editor Settings
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Operating System
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+
+# Other common Python ignores
+.venv/
+.venv/  
+
+#csv
+*.csv
+
