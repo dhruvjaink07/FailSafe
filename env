@@ -1,0 +1,16 @@
+# Shared Render Postgres (active)
+DB_URL=postgresql://failsafe_dev:jCRXjk6GaoAAKCt4xOSn7FWsUeSYUozl@dpg-d793pgoule4c73afpbsg-a.oregon-postgres.render.com:5432/failsafe?sslmode=require
+
+# Local Docker Postgres (quick fallback)
+# DB_URL=postgres://failsafe:failsafe@localhost:5432/failsafe?sslmode=disable
+# DB_HOST=localhost
+# DB_PORT=5432
+# DB_USER=failsafe
+# DB_PASSWORD=failsafe
+# DB_NAME=failsafe
+# DB_SSLMODE=disable
+CONFIG_PARAM_1=C:\Users\Lenovo\AppData\Local\Android\Sdk\platform-tools\adb.exe
+CONFIG_PARAM_2=C:\Users\Lenovo\AppData\Local\Android\Sdk\emulator\emulator.exe
+CONFIG_PARAM_3=D:\gdg-mumbai-ai-hack-cyber\code\build\app\outputs\flutter-apk\app-release.apk
+CONFIG_PARAM_4=com.example.code
+CONFIG_PARAM_5=.MainActivity
