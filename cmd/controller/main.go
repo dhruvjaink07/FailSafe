@@ -128,6 +128,8 @@ func main() {
 	http.HandleFunc("/experiments/history/count", wrap("read_metrics_history", metricsRoles, handlers.ExperimentHistoryCountHandler(orch)))
 	http.HandleFunc("/experiments/history/detail", wrap("read_metrics_history", metricsRoles, handlers.ExperimentHistoryDetailHandler(orch)))
 
+	log.Println("Server running on 127.0.0.1:8000")
+	log.Fatal(http.ListenAndServe("127.0.0.1:8000", nil))
 	srv := &http.Server{Addr: ":8000"}
 
 	// Run server in background
