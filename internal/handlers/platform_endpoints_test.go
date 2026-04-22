@@ -193,6 +193,10 @@ func (f *fakeExperimentService) GetExperimentHistory(apiKeyID string, limit int,
 	return []map[string]interface{}{}, nil
 }
 
+func (f *fakeExperimentService) GetExperimentHistoryCount(apiKeyID string) (int, error) {
+	return 0, nil
+}
+
 func (f *fakeExperimentService) GetExperimentHistoryDetail(apiKeyID string, experimentID string) (map[string]interface{}, error) {
 	return map[string]interface{}{}, nil
 }
@@ -206,7 +210,45 @@ func (f *fakeExperimentService) GetBackendLogs(apiKeyID string, experimentID str
 	return "[fake-log] container started\n[fake-log] injected fault\n[fake-log] recovered\n", nil
 }
 
+func (f *fakeExperimentService) StreamBackendLogs(apiKeyID string, experimentID string, tail int, w http.ResponseWriter, format string, follow bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.experiments[experimentID]; !ok {
+		return fmt.Errorf("experiment not found")
+	}
+	logs := "[fake-log] container started\n[fake-log] injected fault\n[fake-log] recovered\n"
+	if format == "json" {
+		lines := strings.Split(logs, "\n")
+		if len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+			lines = lines[:len(lines)-1]
+		}
+		return json.NewEncoder(w).Encode(map[string]interface{}{"lines": lines, "count": len(lines)})
+	}
+	_, err := w.Write([]byte(logs))
+	return err
+}
+
 func (f *fakeExperimentService) AddFrontendMetrics(data []models.FrontendMetrics) {}
+
+func (f *fakeExperimentService) GetLatestSystemMetrics() (map[string]interface{}, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return map[string]interface{}{
+		"backend":  f.backendMetrics,
+		"android":  f.androidMetrics,
+		"frontend": map[string]interface{}{"failsafe_index": map[string]interface{}{"score": 99.0}},
+	}, nil
+}
+
+func (f *fakeExperimentService) ListExperiments() ([]*models.Experiment, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]*models.Experiment, 0, len(f.experiments))
+	for _, e := range f.experiments {
+		out = append(out, e)
+	}
+	return out, nil
+}
 
 func newTestMux(orch ExperimentService) *http.ServeMux {
 	mux := http.NewServeMux()

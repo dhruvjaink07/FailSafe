@@ -1,8 +1,12 @@
 package orchestrator
 
 import (
+	"bufio"
 	"errors"
+	"io"
+	"net/http"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -126,6 +130,95 @@ func (o *Orchestrator) GetBackendLogs(apiKeyID, experimentID string, tail int) (
 	// Use first target (container/service name)
 	container := exp.Targets[0]
 	return o.docker.GetContainerLogs(container, tail)
+}
+
+// StreamBackendLogs streams container logs to the provided ResponseWriter.
+func (o *Orchestrator) StreamBackendLogs(apiKeyID, experimentID string, tail int, w http.ResponseWriter, format string, follow bool) error {
+	if o.db == nil {
+		return errors.New("storage not configured")
+	}
+
+	owned, err := o.db.IsExperimentOwnedByAPIKey(experimentID, apiKeyID)
+	if err != nil {
+		return err
+	}
+	if !owned {
+		return errors.New("experiment not found or access denied")
+	}
+
+	exp, err := o.db.GetExperimentSnapshot(experimentID, "")
+	if err != nil {
+		return err
+	}
+	if exp == nil {
+		return errors.New("experiment not found")
+	}
+
+	if len(exp.Targets) == 0 {
+		return errors.New("no target containers for experiment")
+	}
+
+	container := exp.Targets[0]
+
+	// Ask docker manager to start the logs command and return a ReadCloser
+	rc, cmd, err := o.docker.StreamContainerLogs(container, tail, follow)
+	if err != nil {
+		return err
+	}
+
+	// Ensure command killed when done
+	defer func() {
+		_ = cmd.Process.Kill()
+		rc.Close()
+	}()
+
+	// For streaming, prefer line-oriented streaming. Support SSE when format=="sse".
+	reader := bufio.NewReader(rc)
+	flusher, _ := w.(http.Flusher)
+
+	if format == "sse" {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+
+		for {
+			line, err := reader.ReadString('\n')
+			if len(line) > 0 {
+				// Trim newline and send as SSE data
+				payload := strings.TrimRight(line, "\r\n")
+				_, _ = w.Write([]byte("data: " + payload + "\n\n"))
+				if flusher != nil {
+					flusher.Flush()
+				}
+			}
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Plain streaming (text) or json chunks: stream raw lines
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	for {
+		line, err := reader.ReadString('\n')
+		if len(line) > 0 {
+			_, _ = w.Write([]byte(line))
+			if flusher != nil {
+				flusher.Flush()
+			}
+		}
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+	}
+	return nil
 }
 
 func (o *Orchestrator) GetLatestSystemMetrics() (map[string]interface{}, error) {

@@ -1,2 +1,7 @@
 pandas
 matplotlib
+statsmodels
+lightgbm
+flask_cors
+psycopg2
+shap

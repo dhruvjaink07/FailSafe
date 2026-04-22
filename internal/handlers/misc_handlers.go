@@ -3,6 +3,8 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"time"
 )
 
 func HealthHandler() http.HandlerFunc {
@@ -18,6 +20,23 @@ func HealthHandler() http.HandlerFunc {
 
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("OK"))
+		// Basic health
+		status := map[string]interface{}{"server": "ok"}
+
+		// If a python grpc address is configured, check its health too.
+		addr := "localhost:50051"
+		if v := os.Getenv("PYTHON_GRPC_ADDR"); v != "" {
+			addr = v
+		}
+		if err := checkPythonHealth(r.Context(), addr, 1*time.Second); err != nil {
+			status["python"] = map[string]interface{}{"status": "unhealthy", "error": err.Error()}
+			w.WriteHeader(http.StatusServiceUnavailable)
+		} else {
+			status["python"] = map[string]interface{}{"status": "ok"}
+			w.WriteHeader(http.StatusOK)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(status)
 	}
 }
 

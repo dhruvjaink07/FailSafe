@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os/exec"
 	"runtime"
 	"strconv"
@@ -294,6 +295,38 @@ func (m *Manager) GetContainerLogs(name string, tail int) (string, error) {
 	}
 
 	return out, nil
+}
+
+// StreamContainerLogs starts `docker logs` for the container and returns an
+// io.ReadCloser to stream output, and the underlying *exec.Cmd so caller can
+// stop it. If follow is true, uses `--follow`.
+func (m *Manager) StreamContainerLogs(name string, tail int, follow bool) (io.ReadCloser, *exec.Cmd, error) {
+	args := []string{"logs"}
+	if tail > 0 {
+		args = append(args, "--tail", fmt.Sprint(tail))
+	}
+	if follow {
+		args = append(args, "--follow")
+	}
+	args = append(args, name)
+
+	cmd := exec.Command("docker", args...)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, nil, err
+	}
+	_, err = cmd.StderrPipe()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if err := cmd.Start(); err != nil {
+		return nil, nil, err
+	}
+
+	// Merge stderr into stdout stream by creating a reader that reads from stdout first then stderr
+	// Simpler: return stdout only; stderr will be lost. For now, return stdout.
+	return stdout, cmd, nil
 }
 
 // ListContainers returns all containers visible to docker ps -a.

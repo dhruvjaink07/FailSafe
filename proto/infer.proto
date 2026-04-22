@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package failsafe.infer;
+
+option go_package = "github.com/dhruvjaink07/failsafe/internal/proto;proto";
+
+// Inference service exposes prediction and health endpoints for the Python model.
+service Inference {
+  // Predict runs inference for a single input payload encoded as JSON.
+  rpc Predict(PredictRequest) returns (PredictResponse) {}
+
+  // BatchPredict runs multiple predictions in one request.
+  rpc BatchPredict(BatchPredictRequest) returns (BatchPredictResponse) {}
+
+  // Health returns a simple readiness/status report.
+  rpc Health(HealthRequest) returns (HealthResponse) {}
+}
+
+message PredictRequest {
+  // Optional model identifier; empty for default.
+  string model = 1;
+
+  // Input payload, serialized as JSON string. Keep flexible to match existing Python API.
+  string input_json = 2;
+}
+
+message PredictResponse {
+  // Result serialized as JSON string. If error is set, result_json may be empty.
+  string result_json = 1;
+  string error = 2;
+}
+
+message BatchPredictRequest {
+  repeated PredictRequest requests = 1;
+}
+
+message BatchPredictResponse {
+  repeated PredictResponse responses = 1;
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  string status = 1; // e.g. "ok", "starting", "error"
+  string details = 2;
+}
